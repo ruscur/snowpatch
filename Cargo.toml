@@ -1,0 +1,10 @@
+[package]
+name = "skibot"
+version = "0.1.0"
+authors = ["Russell Currey <ruscur@russell.cc>"]
+
+[dependencies]
+lettre = { git = "https://github.com/lettre/lettre.git" }
+hyper = "0.7.2"
+git2 = "0.3"
+rustc-serialize = "*"
