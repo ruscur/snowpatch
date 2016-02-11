@@ -53,9 +53,9 @@ impl<'a> CIBackend for JenkinsBackend<'a> {
                   -> Result<String, &'static str> {
         let client = Client::new(); // TODO: do we want to get this from somewhere else?
         let params = url::form_urlencoded::serialize(params);
-        
+
         let res = client.post(&format!("{}/job/{}/buildWithParameters?{}", self.base_url, job_name, params)).send().expect("HTTP request error"); // TODO don't panic here
-        
+
         match res.headers.get::<Location>() {
             Some(loc) => Ok(loc.to_string()),
             None => Err("No Location header returned"),
@@ -72,10 +72,11 @@ impl<'a> JenkinsBackend<'a> {
     pub fn get_build_url(&self, build_queue_entry: &str) -> Option<String> {
         let client = Client::new(); // TODO
         let url = format!("{}api/json", build_queue_entry);
-        
-        let mut res = client.get(&url).send().expect("HTTP request error"); // TODO don't panic here
+
+        let mut resp = client.get(&url).send().expect("HTTP request error"); // TODO don't panic here
         let mut result_str = String::new();
-        res.read_to_string(&mut result_str);
+        resp.read_to_string(&mut result_str)
+            .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
         let json = Json::from_str(&result_str).unwrap();
         let obj = json.as_object().unwrap();
 
@@ -88,9 +89,10 @@ impl<'a> JenkinsBackend<'a> {
     pub fn get_build_status(&self, build_url: &str) -> JenkinsBuildStatus {
         let client = Client::new();
         let url = format!("{}api/json", build_url);
-        let mut res = client.get(&url).send().expect("HTTP request error");
+        let mut resp = client.get(&url).send().expect("HTTP request error");
         let mut result_str = String::new();
-        res.read_to_string(&mut result_str);
+        resp.read_to_string(&mut result_str)
+            .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
         let json = Json::from_str(&result_str).unwrap();
 
         match json.as_object().unwrap().get("building").unwrap().as_boolean().unwrap() {
