@@ -2,6 +2,9 @@
 name = "snowpatch"
 version = "0.1.0"
 authors = ["Russell Currey <ruscur@russell.cc>", "Andrew Donnellan <andrew.donnellan@au1.ibm.com>"]
+description = "continuous integration for patch-based workflows"
+readme = "README.md"
+license = "GPL-2.0+"
 
 [dependencies]
 hyper = "0.7.2"
