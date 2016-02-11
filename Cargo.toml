@@ -1,7 +1,7 @@
 [package]
 name = "snowpatch"
 version = "0.1.0"
-authors = ["Russell Currey <ruscur@russell.cc>"]
+authors = ["Russell Currey <ruscur@russell.cc>", "Andrew Donnellan <andrew.donnellan@au1.ibm.com>"]
 
 [dependencies]
 hyper = "0.7.2"
