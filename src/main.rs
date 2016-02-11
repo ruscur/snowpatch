@@ -33,6 +33,8 @@ use std::thread;
 pub mod api;
 use api::{Series, TestState, TestResult};
 
+pub mod jenkins;
+
 
 fn main() {
     // TODO: refactor these into passable arguments

@@ -12,7 +12,6 @@
 // jenkins.rs - interface to Jenkins REST API
 //
 
-
 // TODO:
 // * get Jenkins config details from somewhere
 // * get status for the build
@@ -24,29 +23,21 @@ extern crate url;
 extern crate rustc_serialize;
 
 use std::io::Read;
-use std::thread::sleep;
-use std::time::Duration;
 
 use hyper::Client;
 use hyper::header::Location;
 use rustc_serialize::json::Json;
 
-
-
-
-
-use std::io;
-
 // Jenkins API definitions
 
 
-trait CIBackend {
+pub trait CIBackend { // TODO: Separate out
     fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>) -> Result<String, &'static str>;
 }
 
 
-struct JenkinsBackend<'a> {
-    base_url: &'a str,
+pub struct JenkinsBackend<'a> {
+    pub base_url: &'a str,
     // TODO: Authentication
 }
 
@@ -72,15 +63,13 @@ impl<'a> CIBackend for JenkinsBackend<'a> {
     }
 }
 
-enum JenkinsBuildStatus {
+pub enum JenkinsBuildStatus {
     Running,
     Done,
 }
 
-use JenkinsBuildStatus::{Running,Done};
-
 impl<'a> JenkinsBackend<'a> {
-    fn get_build_url(&self, build_queue_entry: &str) -> Option<String> {
+    pub fn get_build_url(&self, build_queue_entry: &str) -> Option<String> {
         let client = Client::new(); // TODO
         let url = format!("{}api/json", build_queue_entry);
         
@@ -96,64 +85,17 @@ impl<'a> JenkinsBackend<'a> {
         }
     }
 
-    fn get_build_status(&self, build_url: &str) -> JenkinsBuildStatus {
+    pub fn get_build_status(&self, build_url: &str) -> JenkinsBuildStatus {
         let client = Client::new();
         let url = format!("{}api/json", build_url);
         let mut res = client.get(&url).send().expect("HTTP request error");
         let mut result_str = String::new();
         res.read_to_string(&mut result_str);
         let json = Json::from_str(&result_str).unwrap();
-        //println!("build status json: {:?}", json);
+
         match json.as_object().unwrap().get("building").unwrap().as_boolean().unwrap() {
-            true => Running,
-            false => Done,
+            true => JenkinsBuildStatus::Running,
+            false => JenkinsBuildStatus::Done,
         }
     }
-}
-    
-    
-
-// Test code only!
-fn main() {
-    let jenkins = JenkinsBackend { base_url: "https://jenkins.ozlabs.ibm.com" };
-    let res = jenkins.start_test("linux-build-manual", vec![("USER_EMAIL", "ajd")]);
-    let mut build_queue_location = String::new();
-    
-    match res {
-        Ok(loc) => {
-            println!("Location: {}", loc);
-            build_queue_location = loc;
-        }
-            
-        Err(e) => {
-            println!("{:?}", e);
-            return;
-        }
-    }
-
-    let build_url;
-    println!("Polling until we have a build executable location...");
-    loop {
-        sleep(Duration::new(1,0));
-        let build_url_res = jenkins.get_build_url(&build_queue_location);
-        println!("Build URL: {:?}", build_url_res);
-        match build_url_res {
-            Some(url) => { build_url = url; break; },
-            None => {},
-        }
-    }
-
-    println!("Polling until job completion...");
-    loop {
-        sleep(Duration::new(1,0));
-        let build_status = jenkins.get_build_status(&build_url);
-        match build_status {
-            Running => {},
-            Done => {println!{"DONE!"}; break},
-        }
-        
-    }
-    
-    
-    
 }
