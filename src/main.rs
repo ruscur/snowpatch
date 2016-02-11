@@ -11,6 +11,7 @@
 extern crate hyper;
 extern crate rustc_serialize;
 extern crate git2;
+extern crate toml;
 
 use git2::{Cred, Repository, BranchType, RemoteCallbacks, PushOptions};
 use git2::build::CheckoutBuilder;
@@ -30,15 +31,19 @@ use std::process::Command;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
+use std::env;
 
 pub mod api;
 use api::{Series, TestState, TestResult};
 
 pub mod jenkins;
 
+mod settings;
+use settings::Config;
 
 fn main() {
     // TODO: refactor these into passable arguments
+    let settings = settings::parse(env::args().nth(1).unwrap());
     let api_base = "https://russell.cc/patchwork/api/1.0";
     let api_query = "?ordering=-last_updated&related=expand";
     let project_name = "linuxppc-dev";

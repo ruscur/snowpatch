@@ -5,7 +5,6 @@ user = "ruscur" #TODO: make pushing results configurable,
 pass = "banana" #      and these arguments optional
 
 [jenkins]
-name = "ozlabs"
 url = "https://jenkins.ozlabs.ibm.com"
 port = 443
 # TODO: jenkins auth (our testing jenkins has no auth)
@@ -26,3 +25,4 @@ port = 443
     remote = "github"
     push_results = true
     jobs = ["linux-build-manual"]
+
