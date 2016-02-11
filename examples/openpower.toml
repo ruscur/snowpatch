@@ -1,0 +1,28 @@
+[patchwork]
+url = "https://russell.cc/patchwork"
+port = 443 #optional
+user = "ruscur" #TODO: make pushing results configurable,
+pass = "banana" #      and these arguments optional
+
+[jenkins]
+name = "ozlabs"
+url = "https://jenkins.ozlabs.ibm.com"
+port = 443
+# TODO: jenkins auth (our testing jenkins has no auth)
+
+[projects]
+
+    # the name of the project must be as is in patchwork
+    [projects.skiboot]
+    repository = "/home/ruscur/Documents/skiboot"
+    branch = "master" # the branch to base from
+    remote = "github"
+    jobs = []
+    push_results = true
+
+    [projects.linuxppc-dev]
+    repository = "/home/ruscur/Documents/linux"
+    branch = "master" # TODO: multiple merge branches
+    remote = "github"
+    push_results = true
+    jobs = ["linux-build-manual"]
