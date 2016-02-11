@@ -31,7 +31,6 @@ use rustc_serialize::json::{self};
 use std::io;
 use std::fs::File;
 use std::str;
-use std::path::Path;
 use std::process::Command;
 use std::string::String;
 use std::sync::Arc;
@@ -45,7 +44,6 @@ use api::{Series, TestState, TestResult};
 pub mod jenkins;
 
 mod settings;
-use settings::Config;
 
 const PATCHWORK_API: &'static str = "/api/1.0";
 const PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
@@ -85,8 +83,10 @@ fn main() {
         }));
     }
     // Make sure the repository is starting at master
-    repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch));
-    repo.checkout_head(Some(&mut CheckoutBuilder::new().force()));
+    repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch))
+        .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
+    repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
+        .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
 
     // Set up the remote, and its related authentication
     let mut remote = repo.find_remote(&project.remote).unwrap();
@@ -100,7 +100,7 @@ fn main() {
     // Find the latest commit, which we'll use to branch
     let head = repo.head().unwrap();
     let oid = head.target().unwrap();
-    let mut commit = repo.find_commit(oid).unwrap();
+    let commit = repo.find_commit(oid).unwrap();
 
     // Connect to the Patchwork API
     let url = format!("{}{}/projects/{}/series/{}", &settings.patchwork.url, PATCHWORK_API, project_name, PATCHWORK_QUERY);
@@ -138,8 +138,10 @@ fn main() {
         println!("Creating a new branch...");
         let mut branch = repo.branch(&tag, &commit, true).unwrap();
         println!("Switching to branch...");
-        repo.set_head(branch.get().name().unwrap());
-        repo.checkout_head(None);
+        repo.set_head(branch.get().name().unwrap())
+            .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
+        repo.checkout_head(None)
+            .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
         println!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
 
         let output = Command::new("git") // no "am" support in libgit2
@@ -158,8 +160,10 @@ fn main() {
             Command::new("git").arg("am").arg("--abort").current_dir(&project.repository).output().unwrap();
             println!("Patch did not apply successfully");
         }
-        repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch));
-        repo.checkout_head(Some(&mut CheckoutBuilder::new().force()));
+        repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch))
+            .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
+        repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
+            .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
         // we need to find the branch again since its head has moved
         branch = repo.find_branch(&tag, BranchType::Local).unwrap();
         branch.delete().unwrap();
