@@ -1,41 +1,51 @@
-/* TODO: copyright header */
+/*
+ * Copyright (c) 2016 IBM Corporation
+ * Author: Russell Currey <ruscur@russell.cc>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ */
+
+// settings.rs: code to handle snowpatch settings parsing from TOML
+
 use toml;
 use toml::{Parser, Value};
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
 
-// settings.rs: code to handle snowpatch settings parsing from TOML
-#[derive(RustcDecodable)]
-struct Patchwork {
-    url: String,
-    port: Option<u16>,
-    user: Option<String>,
-    pass: Option<String>
+#[derive(RustcDecodable, Clone)]
+pub struct Patchwork {
+    pub url: String,
+    pub port: Option<u16>,
+    pub user: Option<String>,
+    pub pass: Option<String>
 }
 
 // TODO: make this CI server agnostic (i.e buildbot or whatever)
-#[derive(RustcDecodable)]
-struct Jenkins {
-    url: String,
-    port: Option<u16>,
-    token: Option<String>
+#[derive(RustcDecodable, Clone)]
+pub struct Jenkins {
+    pub url: String,
+    pub port: Option<u16>,
+    pub token: Option<String>
 }
 
-#[derive(RustcDecodable)]
-struct Project {
-    repository: String,
-    branch: String,
-    remote: String,
-    jobs: Vec<String>,
-    push_results: Option<bool>
+#[derive(RustcDecodable, Clone)]
+pub struct Project {
+    pub repository: String,
+    pub branch: String,
+    pub remote: String,
+    pub jobs: Vec<String>,
+    pub push_results: Option<bool>
 }
 
-#[derive(RustcDecodable)]
+#[derive(RustcDecodable, Clone)]
 pub struct Config {
-    patchwork: Patchwork,
-    jenkins: Jenkins,
-    projects: BTreeMap<String, Project>
+    pub patchwork: Patchwork,
+    pub jenkins: Jenkins,
+    pub projects: BTreeMap<String, Project>
 }
 
 pub fn parse(path: String) -> Config {

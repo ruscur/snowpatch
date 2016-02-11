@@ -12,6 +12,7 @@ extern crate hyper;
 extern crate rustc_serialize;
 extern crate git2;
 extern crate toml;
+extern crate tempdir;
 
 use git2::{Cred, Repository, BranchType, RemoteCallbacks, PushOptions};
 use git2::build::CheckoutBuilder;
@@ -32,6 +33,7 @@ use std::string::String;
 use std::sync::Arc;
 use std::thread;
 use std::env;
+use tempdir::TempDir;
 
 pub mod api;
 use api::{Series, TestState, TestResult};
@@ -41,17 +43,23 @@ pub mod jenkins;
 mod settings;
 use settings::Config;
 
-fn main() {
-    // TODO: refactor these into passable arguments
-    let settings = settings::parse(env::args().nth(1).unwrap());
-    let api_base = "https://russell.cc/patchwork/api/1.0";
-    let api_query = "?ordering=-last_updated&related=expand";
-    let project_name = "linuxppc-dev";
-    let base_branch = "refs/heads/master";
-    let remote_name = "github";
-    let repo_path = "/home/ruscur/Documents/linux/";
+const PATCHWORK_API: &'static str = "/api/1.0";
+const PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
+const GIT_REF_BASE: &'static str = "refs/heads";
 
-    let repo = Repository::open(repo_path).unwrap();
+fn main() {
+    let settings = settings::parse(env::args().nth(1).unwrap());
+    /*
+     * Eventually, the main loop will be polling Patchwork for new revisions,
+     * instead of iterating through all recent ones.  At that point, it will
+     * be able to handle multiple projects.  For now, however, just handle
+     * recent patches of the project passed by the command line.
+     */
+    let project_name = env::args().nth(2).unwrap();
+    let project = settings.projects.get(&project_name).unwrap();
+
+    let repo = Repository::open(&project.repository).unwrap();
+
     // The HTTP client we'll use to access the APIs
     let client_base = Arc::new(Client::new());
     let client = client_base.clone();
@@ -65,17 +73,19 @@ fn main() {
                                  SubLevel::Json,
                                  vec![(Attr::Charset, Value::Utf8)]))
     );
-    headers.set(Authorization(Basic {
-        username: "ruscur".to_string(),
-        password: Some("banana".to_string())
-    }));
 
+    if settings.patchwork.user.is_some() {
+        headers.set(Authorization(Basic {
+            username: settings.patchwork.user.clone().unwrap(),
+            password: settings.patchwork.pass.clone()
+        }));
+    }
     // Make sure the repository is starting at master
-    repo.set_head(base_branch);
+    repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch));
     repo.checkout_head(Some(&mut CheckoutBuilder::new().force()));
 
     // Set up the remote, and its related authentication
-    let mut remote = repo.find_remote(remote_name).unwrap();
+    let mut remote = repo.find_remote(&project.remote).unwrap();
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|_, _, _| {
         return Cred::ssh_key_from_agent("git");
@@ -87,10 +97,9 @@ fn main() {
     let head = repo.head().unwrap();
     let oid = head.target().unwrap();
     let mut commit = repo.find_commit(oid).unwrap();
-    println!("Commit: {}", commit.summary().unwrap());
 
     // Connect to the Patchwork API
-    let url = format!("{}/projects/{}/series/{}", api_base, project_name, api_query);
+    let url = format!("{}{}/projects/{}/series/{}", &settings.patchwork.url, PATCHWORK_API, project_name, PATCHWORK_QUERY);
     let mut resp = client.get(&*url).headers(headers.clone()).header(Connection::close()).send().unwrap();
     // Copy the body into our buffer
     let mut body: Vec<u8> = vec![];
@@ -113,11 +122,11 @@ fn main() {
     for i in 0..results.len() {
         let client = client.clone();
         let series = results[i].clone();
+        let mut path = TempDir::new("snowpatch").unwrap().into_path();
         let tag = format!("{}-{}-{}", series.submitter.name, series.id, series.version).replace(" ", "_");
-        let mbox_path = format!("/tmp/patches/{}.mbox", tag);
-        let mbox_url = format!("{}/series/{}/revisions/{}/mbox/", api_base, series.id, series.version);
+        path.push(format!("{}.mbox", tag));
+        let mbox_url = format!("{}{}/series/{}/revisions/{}/mbox/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version);
         let mut mbox_resp = client.get(&*mbox_url).headers(headers.clone()).header(Connection::close()).send().unwrap();
-        let path = Path::new(&mbox_path);
         println!("Opening file {}", path.display());
         let mut mbox = File::create(&path).unwrap();
         println!("Writing to file...");
@@ -131,28 +140,28 @@ fn main() {
 
         let output = Command::new("git") // no "am" support in libgit2
             .arg("am") // apply from mbox
-            .arg(&mbox_path) // ...from our file
-            .current_dir(repo_path) // ...in the repo
+            .arg(&path) // ...from our file
+            .current_dir(&project.repository) // ...in the repo
             .output() // ...and synchronously run it now
             .unwrap(); // ...and we'll assume there's no issue with that
 
         if output.status.success() {
             println!("Patch applied with text {}", String::from_utf8(output.clone().stdout).unwrap());
             // push the new branch to the remote
-            let refspecs: &[&str] = &[&format!("+refs/heads/{}", tag)];
+            let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
             remote.push(refspecs, Some(&mut push_opts)).unwrap();
         } else {
-            Command::new("git").arg("am").arg("--abort").current_dir(repo_path).output().unwrap();
+            Command::new("git").arg("am").arg("--abort").current_dir(&project.repository).output().unwrap();
             println!("Patch did not apply successfully");
         }
-
-        repo.set_head(base_branch);
+        repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch));
         repo.checkout_head(Some(&mut CheckoutBuilder::new().force()));
         // we need to find the branch again since its head has moved
         branch = repo.find_branch(&tag, BranchType::Local).unwrap();
         branch.delete().unwrap();
         println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
         let headers = headers.clone();
+        let settings = settings.clone();
 
         // We've set up a remote branch, time to kick off tests
         thread::spawn(move || {
@@ -168,7 +177,7 @@ fn main() {
                 let encoded = json::encode(&test_result).unwrap();
                 println!("{}", encoded);
                 // Send the result to the API
-                let res = client.post(&format!("{}/series/{}/revisions/{}/test-results/", api_base, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
+                let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
                 assert_eq!(res.status, hyper::status::StatusCode::Created);
             }
         });
