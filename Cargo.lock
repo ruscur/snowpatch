@@ -1,5 +1,5 @@
 [root]
-name = "skibot"
+name = "snowpatch"
 version = "0.1.0"
 dependencies = [
  "git2 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
