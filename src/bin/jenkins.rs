@@ -1,5 +1,5 @@
 //
-// skibot - continuous integration for patch-based workflows
+// snowpatch - continuous integration for patch-based workflows
 //
 // Copyright (C) 2016 IBM Corporation
 // Author: Andrew Donnellan <andrew.donnellan@au1.ibm.com>
@@ -17,7 +17,7 @@
 // * get Jenkins config details from somewhere
 // * get status for the build
 // * get artifacts + console log from completed build (do we make this configurable?)
-// * integrate into skibot worker thread
+// * integrate into snowpatch worker thread
 
 extern crate hyper;
 extern crate url;
