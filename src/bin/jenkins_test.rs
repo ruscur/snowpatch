@@ -16,16 +16,12 @@ extern crate hyper;
 extern crate url;
 extern crate rustc_serialize;
 
-#[path="../jenkins.rs"] // TODO: Can we do this more cleanly?
-mod jenkins;
-
+extern crate snowpatch;
 
 use std::thread::sleep;
 use std::time::Duration;
 
-use jenkins::JenkinsBackend;
-use jenkins::CIBackend;
-use jenkins::JenkinsBuildStatus;
+use snowpatch::jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
 
 fn main() {
     let jenkins = JenkinsBackend { base_url: "https://jenkins.ozlabs.ibm.com" };
