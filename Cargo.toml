@@ -6,6 +6,9 @@ description = "continuous integration for patch-based workflows"
 readme = "README.md"
 license = "GPL-2.0+"
 
+[[bin]]
+name = "snowpatch"
+
 [dependencies]
 hyper = "0.7.2"
 git2 = "0.3"
