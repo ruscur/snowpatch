@@ -42,6 +42,7 @@ pub mod api;
 use api::{Series, TestState, TestResult};
 
 pub mod jenkins;
+use jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
 
 mod settings;
 
@@ -170,24 +171,61 @@ fn main() {
         println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
         let headers = headers.clone();
         let settings = settings.clone();
+        let project = project.clone();
 
         // We've set up a remote branch, time to kick off tests
         thread::spawn(move || {
+            let test_result;
             if !output.status.success() {
                 // It didn't apply.  No need to bother testing.
-                let test_result = TestResult {
+                test_result = TestResult {
                     test_name: "apply_patch".to_string(),
                     state: TestState::FAILURE.string(),
                     url: None,
                     summary: Some("Series failed to apply to branch master".to_string()),
                 };
-                // Encode our result into JSON
-                let encoded = json::encode(&test_result).unwrap();
-                println!("{}", encoded);
-                // Send the result to the API
-                let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
-                assert_eq!(res.status, hyper::status::StatusCode::Created);
+            } else {
+                test_result = TestResult {
+                    test_name: "apply_patch".to_string(),
+                    state: TestState::SUCCESS.string(),
+                    url: None,
+                    summary: Some("Successfully applied".to_string()),
+                };
             }
+
+            // Spawn a jenkins job
+            let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
+            for job in project.jobs {
+                println!("Starting job: {}", &job);
+                let res = jenkins.start_test(&job, vec![("USER_EMAIL", "ajd")]).unwrap();
+                println!("{:?}", &res);
+                let build_url_real;
+                loop {
+                    let build_url = jenkins.get_build_url(&res);
+                    match build_url {
+                        Some(url) => { build_url_real = url; break; },
+                        None => { },
+                    }
+                }
+                println!("Build URL: {}", build_url_real);
+
+                loop {
+                    let status = jenkins.get_build_status(&build_url_real);
+                    match status  {
+                        JenkinsBuildStatus::Done => break,
+                        _ => {}
+                    }
+                }
+                println!("Job done!");
+            }
+
+            // Encode our result into JSON
+            let encoded = json::encode(&test_result).unwrap();
+            println!("{}", encoded);
+            // Send the result to the API
+            let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
+            assert_eq!(res.status, hyper::status::StatusCode::Created);
+            
         });
     }
 }
