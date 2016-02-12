@@ -89,7 +89,7 @@ fn main() {
         .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
 
     // Set up the remote, and its related authentication
-    let mut remote = repo.find_remote(&project.remote).unwrap();
+    let mut remote = repo.find_remote(&project.remote_name).unwrap();
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|_, _, _| {
         return Cred::ssh_key_from_agent("git");

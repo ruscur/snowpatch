@@ -36,7 +36,8 @@ pub struct Jenkins {
 pub struct Project {
     pub repository: String,
     pub branch: String,
-    pub remote: String,
+    pub remote_name: String,
+    pub remote_uri: String,
     pub jobs: Vec<String>,
     pub push_results: Option<bool>
 }
