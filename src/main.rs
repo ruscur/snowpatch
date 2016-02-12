@@ -197,7 +197,7 @@ fn main() {
             let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
             for job in project.jobs {
                 println!("Starting job: {}", &job);
-                let res = jenkins.start_test(&job, vec![("USER_EMAIL", "ajd")]).unwrap();
+                let res = jenkins.start_test(&job, vec![("USER_EMAIL", "ajd"), ("GIT_REPO_TO_USE", &project.remote_uri), ("GIT_REF_TO_BUILD", &tag)]).unwrap();
                 println!("{:?}", &res);
                 let build_url_real;
                 loop {
