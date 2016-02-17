@@ -26,7 +26,8 @@ pub struct Patchwork {
     pub url: String,
     pub port: Option<u16>,
     pub user: Option<String>,
-    pub pass: Option<String>
+    pub pass: Option<String>,
+    pub polling_interval: u64,
 }
 
 // TODO: make this CI server agnostic (i.e buildbot or whatever)
