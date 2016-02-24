@@ -12,6 +12,9 @@
 
 use toml;
 use toml::{Parser, Value};
+
+use git2::{Repository, Error};
+
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
@@ -40,6 +43,12 @@ pub struct Project {
     pub remote_uri: String,
     pub jobs: Vec<String>,
     pub push_results: Option<bool>
+}
+
+impl Project {
+    pub fn get_repo(&self) -> Result<Repository, Error> {
+        return Repository::open(&self.repository);
+    }
 }
 
 #[derive(RustcDecodable, Clone)]
