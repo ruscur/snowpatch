@@ -53,7 +53,6 @@ pub struct Series {
     pub results: Option<Vec<Result>>
 }
 
-// /api/1.0/series/*/revisions/*/test-results/
 pub enum TestState {
     PENDING,
     SUCCESS,
@@ -72,6 +71,7 @@ impl TestState {
     }
 }
 
+// /api/1.0/series/*/revisions/*/test-results/
 #[derive(RustcEncodable)]
 pub struct TestResult {
     pub test_name: String,

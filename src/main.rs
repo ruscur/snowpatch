@@ -12,14 +12,16 @@
 // main.rs - snowpatch main program
 //
 
+// TODO: every unwrap() needs to be an unwrap_or_else() or similar
+
 extern crate hyper;
 extern crate rustc_serialize;
 extern crate git2;
 extern crate toml;
 extern crate tempdir;
+extern crate docopt;
 
-use git2::{Cred, Repository, BranchType, RemoteCallbacks, PushOptions};
-use git2::build::CheckoutBuilder;
+use git2::{Cred, BranchType, RemoteCallbacks, PushOptions};
 
 use hyper::Client;
 use hyper::header::Connection;
@@ -28,6 +30,10 @@ use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 use rustc_serialize::json::{self};
 
+use tempdir::TempDir;
+
+use docopt::Docopt;
+
 use std::io;
 use std::fs::File;
 use std::str;
@@ -35,33 +41,47 @@ use std::process::Command;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
-use std::env;
-use tempdir::TempDir;
 
-pub mod api;
+mod api;
 use api::{Series, TestState, TestResult};
 
-pub mod jenkins;
+mod jenkins;
 use jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
 
 mod settings;
+mod git;
+use git::GIT_REF_BASE;
 
-const PATCHWORK_API: &'static str = "/api/1.0";
-const PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
-const GIT_REF_BASE: &'static str = "refs/heads";
+static USAGE: &'static str = "
+Usage: snowpatch [options] [<config-file>]
 
+By default, snowpatch runs as a long-running daemon.
+
+Options:
+	-n, --count <count>  Run tests on <count> recent series and exit.
+	-f, --mbox <mbox>    Run tests on the given mbox file and exit.
+	-v, --version        Output version information and exit.
+	-h, --help           Output this help text and exit.
+";
+
+#[derive(RustcDecodable)]
+struct Args {
+    arg_config_file: String,
+    flag_count: u8,
+    flag_mbox: String,
+}
+
+// TODO: more constants.  constants for format strings of URLs and such.
+static PATCHWORK_API: &'static str = "/api/1.0";
+static PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
+
+// TODO: split up this function.  It's way, way too big.
 fn main() {
-    let settings = settings::parse(env::args().nth(1).unwrap());
-    /*
-     * Eventually, the main loop will be polling Patchwork for new revisions,
-     * instead of iterating through all recent ones.  At that point, it will
-     * be able to handle multiple projects.  For now, however, just handle
-     * recent patches of the project passed by the command line.
-     */
-    let project_name = env::args().nth(2).unwrap();
-    let project = settings.projects.get(&project_name).unwrap();
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
-    let repo = Repository::open(&project.repository).unwrap();
+    let settings = settings::parse(args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
     let client_base = Arc::new(Client::new());
@@ -79,32 +99,28 @@ fn main() {
 
     if settings.patchwork.user.is_some() {
         headers.set(Authorization(Basic {
+            // This unwrap is fine since we know it will work
             username: settings.patchwork.user.clone().unwrap(),
             password: settings.patchwork.pass.clone()
         }));
     }
-    // Make sure the repository is starting at master
-    repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch))
-        .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
-    repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
-        .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
+    // Make sure the repository is starting at the base branch
+    for (_, config) in settings.projects.iter() {
+        let repo = config.get_repo().unwrap();
+        git::checkout_branch(&repo, &config.branch);
+    }
 
     // Set up the remote, and its related authentication
-    let mut remote = repo.find_remote(&project.remote_name).unwrap();
     let mut callbacks = RemoteCallbacks::new();
+    // TODO: make this configurable.  Not just for ssh keys, too.
     callbacks.credentials(|_, _, _| {
         return Cred::ssh_key_from_agent("git");
     });
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(callbacks);
 
-    // Find the latest commit, which we'll use to branch
-    let head = repo.head().unwrap();
-    let oid = head.target().unwrap();
-    let commit = repo.find_commit(oid).unwrap();
-
     // Connect to the Patchwork API
-    let url = format!("{}{}/projects/{}/series/{}", &settings.patchwork.url, PATCHWORK_API, project_name, PATCHWORK_QUERY);
+    let url = format!("{}{}/series/{}", &settings.patchwork.url, PATCHWORK_API, PATCHWORK_QUERY);
     let mut resp = client.get(&*url).headers(headers.clone()).header(Connection::close()).send().unwrap();
     // Copy the body into our buffer
     let mut body: Vec<u8> = vec![];
@@ -115,6 +131,7 @@ fn main() {
     let decoded: Series = json::decode(body_str).unwrap();
     // Get our results: the list of patch series the API gave us
     let results = decoded.results.unwrap();
+    println!("{}", body_str);
 
     /*
      * For each series, get patches and apply and test...
@@ -125,8 +142,19 @@ fn main() {
      * everything before we have a remote with our patches on the main thread.
      */
     for i in 0..results.len() {
+        let settings = settings.clone();
         let client = client.clone();
+        let headers = headers.clone();
         let series = results[i].clone();
+        // TODO: this is a horrendous way of continuing on fail, fix!
+        let project = settings.projects.get(&series.project.name).clone();
+        if !project.is_some() {
+            continue;
+        }
+        let settings = settings.clone();
+        let project = settings.projects.get(&series.project.name).unwrap().clone();
+        let repo = project.get_repo().unwrap();
+
         let mut path = TempDir::new("snowpatch").unwrap().into_path();
         let tag = format!("{}-{}-{}", series.submitter.name, series.id, series.version).replace(" ", "_");
         path.push(format!("{}.mbox", tag));
@@ -137,6 +165,7 @@ fn main() {
         println!("Writing to file...");
         io::copy(&mut mbox_resp, &mut mbox).unwrap();
         println!("Creating a new branch...");
+        let commit = git::get_latest_commit(&repo);
         let mut branch = repo.branch(&tag, &commit, true).unwrap();
         println!("Switching to branch...");
         repo.set_head(branch.get().name().unwrap())
@@ -156,22 +185,17 @@ fn main() {
             println!("Patch applied with text {}", String::from_utf8(output.clone().stdout).unwrap());
             // push the new branch to the remote
             let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
-            remote.push(refspecs, Some(&mut push_opts)).unwrap();
+            repo.find_remote(&project.remote_name).unwrap()
+                .push(refspecs, Some(&mut push_opts)).unwrap();
         } else {
             Command::new("git").arg("am").arg("--abort").current_dir(&project.repository).output().unwrap();
             println!("Patch did not apply successfully");
         }
-        repo.set_head(&format!("{}/{}", GIT_REF_BASE, &project.branch))
-            .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
-        repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
-            .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
+        git::checkout_branch(&repo, &project.branch);
         // we need to find the branch again since its head has moved
         branch = repo.find_branch(&tag, BranchType::Local).unwrap();
         branch.delete().unwrap();
         println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
-        let headers = headers.clone();
-        let settings = settings.clone();
-        let project = project.clone();
 
         // We've set up a remote branch, time to kick off tests
         thread::spawn(move || {
@@ -225,7 +249,6 @@ fn main() {
             // Send the result to the API
             let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
             assert_eq!(res.status, hyper::status::StatusCode::Created);
-            
         });
     }
 }
