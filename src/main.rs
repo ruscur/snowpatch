@@ -219,9 +219,22 @@ fn main() {
 
             // Spawn a jenkins job
             let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
-            for job in project.jobs {
-                println!("Starting job: {}", &job);
-                let res = jenkins.start_test(&job, vec![("USER_EMAIL", "ajd"), ("GIT_REPO_TO_USE", &project.remote_uri), ("GIT_REF_TO_BUILD", &tag)]).unwrap();
+
+            for job_params in project.jobs.iter() {
+                let job_name = job_params.get("job").unwrap();
+                let mut jenkins_params = Vec::<(&str, &str)>::new();
+                for (param_name, param_value) in job_params.iter() {
+                    println!("Param name {}, value {}", &param_name, &param_value);
+                    match param_name.as_ref() {
+                        // TODO: Validate special parameter names in config at start of program
+                        "job" => { },
+                        "remote" => jenkins_params.push((&param_value, &project.remote_uri)),
+                        "branch" => jenkins_params.push((&param_value, &tag)),
+                        _ => jenkins_params.push((&param_name, &param_value)),
+                    }
+                }
+                println!("Starting job: {}", &job_name);
+                let res = jenkins.start_test(&job_name, jenkins_params).unwrap();
                 println!("{:?}", &res);
                 let build_url_real;
                 loop {

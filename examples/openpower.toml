@@ -17,7 +17,7 @@ port = 443
     branch = "master" # the branch to base from
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/skiboot.git"
-    jobs = []
+    jobs = {}
     push_results = true
 
     [projects.linuxppc-dev]
@@ -26,5 +26,17 @@ port = 443
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/linux.git"
     push_results = true
-    jobs = ["linux-build-manual"]
 
+        [[projects.linuxppc-dev.jobs]]
+        job = "linux-build-manual"
+        remote = "GIT_REPO_TO_USE"
+        branch = "GIT_REF_TO_BUILD"
+        USER_EMAIL = "username"
+        DEFCONFIG_TO_USE = "pseries_le_defconfig"
+
+        [[projects.linuxppc-dev.jobs]]
+        job = "linux-build-manual"
+        remote = "GIT_REPO_TO_USE"
+        branch = "GIT_REF_TO_BUILD"
+        USER_EMAIL = "username"
+        DEFCONFIG_TO_USE = "ppc64le_defconfig"

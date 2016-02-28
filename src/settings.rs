@@ -19,6 +19,8 @@ use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
 
+// TODO: Give more informative error messages when we fail to parse.
+
 #[derive(RustcDecodable, Clone)]
 pub struct Patchwork {
     pub url: String,
@@ -41,7 +43,7 @@ pub struct Project {
     pub branch: String,
     pub remote_name: String,
     pub remote_uri: String,
-    pub jobs: Vec<String>,
+    pub jobs: Vec<BTreeMap<String, String>>,
     pub push_results: Option<bool>
 }
 
