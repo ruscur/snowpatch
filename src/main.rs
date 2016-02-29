@@ -82,6 +82,7 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     let settings = settings::parse(args.arg_config_file);
+    let mut children: Vec<std::thread::JoinHandle<TestResult>> = Vec::new();
 
     // The HTTP client we'll use to access the APIs
     let client_base = Arc::new(Client::new());
@@ -198,7 +199,7 @@ fn main() {
         println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
 
         // We've set up a remote branch, time to kick off tests
-        thread::spawn(move || {
+        children.push(thread::spawn(move || {
             let test_result;
             if !output.status.success() {
                 // It didn't apply.  No need to bother testing.
@@ -262,6 +263,13 @@ fn main() {
             // Send the result to the API
             let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
             assert_eq!(res.status, hyper::status::StatusCode::Created);
-        });
+
+            return test_result;
+        }));
+    }
+
+    // Wait for threads
+    for thread in children {
+        thread.join();
     }
 }
