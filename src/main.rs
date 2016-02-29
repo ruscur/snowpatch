@@ -82,6 +82,7 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     let settings = settings::parse(args.arg_config_file);
+    let mut children: Vec<std::thread::JoinHandle<TestResult>> = Vec::new();
 
     // The HTTP client we'll use to access the APIs
     let client_base = Arc::new(Client::new());
@@ -198,7 +199,7 @@ fn main() {
         println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
 
         // We've set up a remote branch, time to kick off tests
-        thread::spawn(move || {
+        children.push(thread::spawn(move || {
             let test_result;
             if !output.status.success() {
                 // It didn't apply.  No need to bother testing.
@@ -219,9 +220,22 @@ fn main() {
 
             // Spawn a jenkins job
             let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
-            for job in project.jobs {
-                println!("Starting job: {}", &job);
-                let res = jenkins.start_test(&job, vec![("USER_EMAIL", "ajd"), ("GIT_REPO_TO_USE", &project.remote_uri), ("GIT_REF_TO_BUILD", &tag)]).unwrap();
+
+            for job_params in project.jobs.iter() {
+                let job_name = job_params.get("job").unwrap();
+                let mut jenkins_params = Vec::<(&str, &str)>::new();
+                for (param_name, param_value) in job_params.iter() {
+                    println!("Param name {}, value {}", &param_name, &param_value);
+                    match param_name.as_ref() {
+                        // TODO: Validate special parameter names in config at start of program
+                        "job" => { },
+                        "remote" => jenkins_params.push((&param_value, &project.remote_uri)),
+                        "branch" => jenkins_params.push((&param_value, &tag)),
+                        _ => jenkins_params.push((&param_name, &param_value)),
+                    }
+                }
+                println!("Starting job: {}", &job_name);
+                let res = jenkins.start_test(&job_name, jenkins_params).unwrap();
                 println!("{:?}", &res);
                 let build_url_real;
                 loop {
@@ -249,6 +263,13 @@ fn main() {
             // Send the result to the API
             let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
             assert_eq!(res.status, hyper::status::StatusCode::Created);
-        });
+
+            return test_result;
+        }));
+    }
+
+    // Wait for threads
+    for thread in children {
+        thread.join();
     }
 }
