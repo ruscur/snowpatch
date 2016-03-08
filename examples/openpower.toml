@@ -3,6 +3,7 @@ url = "https://russell.cc/patchwork"
 port = 443 #optional
 user = "ruscur" #TODO: make pushing results configurable,
 pass = "banana" #      and these arguments optional
+polling_interval = 10 # polling interval in minutes
 
 [jenkins]
 url = "https://jenkins.ozlabs.ibm.com"
