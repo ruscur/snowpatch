@@ -13,6 +13,10 @@
 use git2::{Repository, Commit};
 use git2::build::CheckoutBuilder;
 
+use std::result::Result;
+use std::path::Path;
+use std::process::{Command, Output};
+
 pub static GIT_REF_BASE: &'static str = "refs/heads";
 
 pub fn get_latest_commit(repo: &Repository) -> Commit {
@@ -26,4 +30,24 @@ pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
         .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
     repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
         .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
+}
+
+pub fn apply_patch(repo: &Repository, path: &Path) -> Result<Output, &'static str> {
+    let workdir = repo.workdir().unwrap(); // TODO: support bare repositories
+
+    // We call out to "git am" since libgit2 doesn't implement "am"
+    let output = Command::new("git")
+        .arg("am") // apply from mbox
+        .arg(&path) // from our mbox file
+        .current_dir(&workdir) // in the repo's working directory
+        .output() // run synchronously
+        .unwrap(); // TODO
+
+    if output.status.success() {
+        println!("Patch applied with text {}", String::from_utf8(output.clone().stdout).unwrap());
+        return Ok(output);
+    } else {
+        Command::new("git").arg("am").arg("--abort").current_dir(&workdir).output().unwrap();
+        return Err("Patch did not apply successfully");
+    }
 }

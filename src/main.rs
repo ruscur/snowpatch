@@ -37,7 +37,6 @@ use docopt::Docopt;
 use std::io;
 use std::fs::File;
 use std::str;
-use std::process::Command;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
@@ -148,48 +147,48 @@ fn test_patch(settings: &Config, project: &Project, client: &Client, series: &ap
         .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
     println!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
 
-    let output = Command::new("git") // no "am" support in libgit2
-        .arg("am") // apply from mbox
-        .arg(&path) // ...from our file
-        .current_dir(&project.repository) // ...in the repo
-        .output() // ...and synchronously run it now
-        .unwrap(); // ...and we'll assume there's no issue with that
-
-    if output.status.success() {
-        println!("Patch applied with text {}", String::from_utf8(output.clone().stdout).unwrap());
-        // push the new branch to the remote
-        let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
-        remote.push(refspecs, Some(&mut push_opts)).unwrap();
-    } else {
-        Command::new("git").arg("am").arg("--abort").current_dir(&project.repository).output().unwrap();
-        println!("Patch did not apply successfully");
+    let output = git::apply_patch(&repo, &path);
+    match output {
+        Ok(_) => {
+            let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
+            remote.push(refspecs, Some(&mut push_opts)).unwrap();
+        }
+        _ => {}
     }
+    
     git::checkout_branch(&repo, &project.branch);
     // we need to find the branch again since its head has moved
     branch = repo.find_branch(&tag, BranchType::Local).unwrap();
     branch.delete().unwrap();
     println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
+
+    let test_result;
+    match output {
+        Ok(_) => {
+            test_result = TestResult {
+                test_name: "apply_patch".to_string(),
+                state: TestState::SUCCESS.string(),
+                url: None,
+                summary: Some("Successfully applied".to_string()),
+            };
+        },
+        Err(e) => {
+            // It didn't apply.  No need to bother testing.
+            test_result = TestResult {
+                test_name: "apply_patch".to_string(),
+                state: TestState::FAILURE.string(),
+                url: None,
+                summary: Some("Series failed to apply to branch".to_string()),
+            };
+            // TODO: Post...
+            //return test_result;
+            return;
+        }
+    }
+
     let headers = headers.clone();
     let settings = settings.clone();
     let project = project.clone();
-
-    let test_result;
-    if !output.status.success() {
-        // It didn't apply.  No need to bother testing.
-        test_result = TestResult {
-            test_name: "apply_patch".to_string(),
-            state: TestState::FAILURE.string(),
-            url: None,
-            summary: Some("Series failed to apply to branch master".to_string()),
-        };
-    } else {
-        test_result = TestResult {
-            test_name: "apply_patch".to_string(),
-            state: TestState::SUCCESS.string(),
-            url: None,
-            summary: Some("Successfully applied".to_string()),
-        };
-    }
     let settings_clone = settings.clone();
     // We've set up a remote branch, time to kick off tests
     thread::spawn(move || { run_test(&settings_clone, &project, &tag); }); // TODO: Get result
