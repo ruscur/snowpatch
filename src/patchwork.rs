@@ -9,8 +9,12 @@
 // Software Foundation; either version 2 of the License, or (at your option)
 // any later version.
 //
-// patchwork.rs - patchwork API declarations
+// patchwork.rs - patchwork API
 //
+
+// TODO: more constants.  constants for format strings of URLs and such.
+pub static PATCHWORK_API: &'static str = "/api/1.0";
+pub static PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
 
 // /api/1.0/projects/*/series/
 

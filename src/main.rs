@@ -43,7 +43,7 @@ use std::thread;
 use std::time::Duration;
 
 mod patchwork;
-use patchwork::{Series, TestState, TestResult};
+use patchwork::{Series, TestState, TestResult, PATCHWORK_API, PATCHWORK_QUERY};
 
 mod jenkins;
 use jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
@@ -72,10 +72,6 @@ struct Args {
     flag_count: u8,
     flag_mbox: String,
 }
-
-// TODO: more constants.  constants for format strings of URLs and such.
-static PATCHWORK_API: &'static str = "/api/1.0";
-static PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
 
 fn run_test(settings: &Config, project: &Project, tag: &str) {
     let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
