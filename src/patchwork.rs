@@ -9,7 +9,7 @@
 // Software Foundation; either version 2 of the License, or (at your option)
 // any later version.
 //
-// api.rs - patchwork API declarations
+// patchwork.rs - patchwork API declarations
 //
 
 // /api/1.0/projects/*/series/

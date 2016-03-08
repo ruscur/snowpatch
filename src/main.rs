@@ -43,8 +43,8 @@ use std::thread;
 use std::env;
 use std::time::Duration;
 
-mod api;
-use api::{Series, TestState, TestResult};
+mod patchwork;
+use patchwork::{Series, TestState, TestResult};
 
 mod jenkins;
 use jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
@@ -118,7 +118,7 @@ fn run_test(settings: &Config, project: &Project, tag: &str) {
     }
 }
 
-fn test_patch(settings: &Config, project: &Project, client: &Client, series: &api::Result, headers: &Headers, repo: &Repository) {
+fn test_patch(settings: &Config, project: &Project, client: &Client, series: &patchwork::Result, headers: &Headers, repo: &Repository) {
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|_, _, _| {
