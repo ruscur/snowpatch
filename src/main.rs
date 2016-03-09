@@ -206,28 +206,16 @@ fn main() {
                                      &settings.patchwork.pass.clone());
     }
 
+    // Poll patchwork for new series. For each series, get patches, apply and test.
     loop {
         let series_list = patchwork.get_series_query().results.unwrap();
-        /*
-         * For each series, get patches and apply and test...
-         * This section is running on the main thread.  The reason for this is
-         * all git operations would need to be bound by a mutex anyway, so handle
-         * everything before we have a remote with our patches on the main thread.
-         */
-        for i in 0..series_list.len() { // TODO: don't use a counter, use a nice for loop
-            let settings = settings.clone();
-            //let headers = headers.clone();
-            let series = series_list[i].clone();
-            // TODO: this is a horrendous way of continuing on fail, fix!
-            let project = settings.projects.get(&series.project.name).clone();
-            if !project.is_some() {
-                continue;
+        for series in series_list {
+            match settings.projects.get(&series.project.name) {
+                None => continue,
+                Some(project) => {
+                    test_patch(&patchwork, &settings, &project, &series, &project.get_repo().unwrap());
+                }
             }
-            let settings = settings.clone();
-            let project = settings.projects.get(&series.project.name).unwrap().clone();
-            let repo = project.get_repo().unwrap();
-            let series = series_list[i].clone();
-            test_patch(&patchwork, &settings, &project, &series, &repo);
         }
         thread::sleep(Duration::new(settings.patchwork.polling_interval,0));
     }
