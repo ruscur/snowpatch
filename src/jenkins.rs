@@ -2,7 +2,9 @@
 // snowpatch - continuous integration for patch-based workflows
 //
 // Copyright (C) 2016 IBM Corporation
-// Author: Andrew Donnellan <andrew.donnellan@au1.ibm.com>
+// Authors:
+//     Russell Currey <ruscur@russell.cc>
+//     Andrew Donnellan <andrew.donnellan@au1.ibm.com>
 //
 // This program is free software; you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by the Free
