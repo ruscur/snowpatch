@@ -191,10 +191,9 @@ fn main() {
     let settings = settings::parse(args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
-    let client_base = Arc::new(Client::new());
-    let client = client_base.clone();
+    let client = Arc::new(Client::new());
 
-    // Make sure the repository is starting at the base branch
+    // Make sure each project repository is starting at the base branch
     for (_, config) in settings.projects.iter() {
         let repo = config.get_repo().unwrap();
         git::checkout_branch(&repo, &config.branch);
@@ -205,6 +204,7 @@ fn main() {
         patchwork.set_authentication(&settings.patchwork.user.clone().unwrap(),
                                      &settings.patchwork.pass.clone());
     }
+    let patchwork = patchwork;
 
     // Poll patchwork for new series. For each series, get patches, apply and test.
     loop {
@@ -217,6 +217,6 @@ fn main() {
                 }
             }
         }
-        thread::sleep(Duration::new(settings.patchwork.polling_interval,0));
+        thread::sleep(Duration::new(settings.patchwork.polling_interval, 0));
     }
 }
