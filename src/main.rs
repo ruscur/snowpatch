@@ -2,7 +2,9 @@
 // snowpatch - continuous integration for patch-based workflows
 //
 // Copyright (C) 2016 IBM Corporation
-// Author: Russell Currey <ruscur@russell.cc>
+// Authors:
+//     Russell Currey <ruscur@russell.cc>
+//     Andrew Donnellan <andrew.donnellan@au1.ibm.com>
 //
 // This program is free software; you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by the Free
@@ -24,11 +26,6 @@ extern crate docopt;
 use git2::{Cred, Repository, BranchType, RemoteCallbacks, PushOptions};
 
 use hyper::Client;
-use hyper::header::Connection;
-use hyper::header::{Headers, Accept, ContentType, qitem, Authorization, Basic};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
-
-use rustc_serialize::json::{self};
 
 use tempdir::TempDir;
 
@@ -36,16 +33,13 @@ use docopt::Docopt;
 
 use std::io;
 use std::fs::File;
-use std::str;
-use std::process::Command;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
-use std::env;
 use std::time::Duration;
 
-mod api;
-use api::{Series, TestState, TestResult};
+mod patchwork;
+use patchwork::{PatchworkServer, TestState, TestResult};
 
 mod jenkins;
 use jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
@@ -74,10 +68,6 @@ struct Args {
     flag_count: u8,
     flag_mbox: String,
 }
-
-// TODO: more constants.  constants for format strings of URLs and such.
-static PATCHWORK_API: &'static str = "/api/1.0";
-static PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
 
 fn run_test(settings: &Config, project: &Project, tag: &str) {
     let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
@@ -119,7 +109,7 @@ fn run_test(settings: &Config, project: &Project, tag: &str) {
     }
 }
 
-fn test_patch(settings: &Config, project: &Project, client: &Client, series: &api::Result, headers: &Headers, repo: &Repository) {
+fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project, series: &patchwork::Result, repo: &Repository) {
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|_, _, _| {
@@ -127,13 +117,12 @@ fn test_patch(settings: &Config, project: &Project, client: &Client, series: &ap
     });
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(callbacks);
-    
-    let client = client.clone();
+
     let mut path = TempDir::new("snowpatch").unwrap().into_path();
     let tag = format!("{}-{}-{}", series.submitter.name, series.id, series.version).replace(" ", "_");
     path.push(format!("{}.mbox", tag));
-    let mbox_url = format!("{}{}/series/{}/revisions/{}/mbox/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version);
-    let mut mbox_resp = client.get(&*mbox_url).headers(headers.clone()).header(Connection::close()).send().unwrap();
+
+    let mut mbox_resp = patchwork.get_series_mbox(&series.id, &series.version).unwrap();
     println!("Opening file {}", path.display());
     let mut mbox = File::create(&path).unwrap();
     println!("Writing to file...");
@@ -148,58 +137,50 @@ fn test_patch(settings: &Config, project: &Project, client: &Client, series: &ap
         .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
     println!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
 
-    let output = Command::new("git") // no "am" support in libgit2
-        .arg("am") // apply from mbox
-        .arg(&path) // ...from our file
-        .current_dir(&project.repository) // ...in the repo
-        .output() // ...and synchronously run it now
-        .unwrap(); // ...and we'll assume there's no issue with that
-
-    if output.status.success() {
-        println!("Patch applied with text {}", String::from_utf8(output.clone().stdout).unwrap());
-        // push the new branch to the remote
-        let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
-        remote.push(refspecs, Some(&mut push_opts)).unwrap();
-    } else {
-        Command::new("git").arg("am").arg("--abort").current_dir(&project.repository).output().unwrap();
-        println!("Patch did not apply successfully");
+    let output = git::apply_patch(&repo, &path);
+    match output {
+        Ok(_) => {
+            let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
+            remote.push(refspecs, Some(&mut push_opts)).unwrap();
+        }
+        _ => {}
     }
+    
     git::checkout_branch(&repo, &project.branch);
     // we need to find the branch again since its head has moved
     branch = repo.find_branch(&tag, BranchType::Local).unwrap();
     branch.delete().unwrap();
     println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
-    let headers = headers.clone();
-    let settings = settings.clone();
-    let project = project.clone();
 
     let test_result;
-    if !output.status.success() {
-        // It didn't apply.  No need to bother testing.
-        test_result = TestResult {
-            test_name: "apply_patch".to_string(),
-            state: TestState::FAILURE.string(),
-            url: None,
-            summary: Some("Series failed to apply to branch master".to_string()),
-        };
-    } else {
-        test_result = TestResult {
-            test_name: "apply_patch".to_string(),
-            state: TestState::SUCCESS.string(),
-            url: None,
-            summary: Some("Successfully applied".to_string()),
-        };
+    match output {
+        Ok(_) => {
+            test_result = TestResult {
+                test_name: "apply_patch".to_string(),
+                state: TestState::SUCCESS.string(),
+                url: None,
+                summary: Some("Successfully applied".to_string()),
+            };
+            patchwork.post_test_result(test_result, &series.id, &series.version);
+        },
+        Err(_) => {
+            // It didn't apply.  No need to bother testing.
+            test_result = TestResult {
+                test_name: "apply_patch".to_string(),
+                state: TestState::FAILURE.string(),
+                url: None,
+                summary: Some("Series failed to apply to branch".to_string()),
+            };
+            patchwork.post_test_result(test_result, &series.id, &series.version);
+            return;
+        }
     }
+
+    let settings = settings.clone();
+    let project = project.clone();
     let settings_clone = settings.clone();
     // We've set up a remote branch, time to kick off tests
     thread::spawn(move || { run_test(&settings_clone, &project, &tag); }); // TODO: Get result
-    
-    // Encode our result into JSON
-    let encoded = json::encode(&test_result).unwrap();
-    println!("{}", encoded);
-    // Send the result to the API
-    let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
-    assert_eq!(res.status, hyper::status::StatusCode::Created);
 }
 
 fn main() {
@@ -210,68 +191,32 @@ fn main() {
     let settings = settings::parse(args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
-    let client_base = Arc::new(Client::new());
-    let client = client_base.clone();
+    let client = Arc::new(Client::new());
 
-    let mut headers = Headers::new();
-    headers.set(Accept(vec![qitem(Mime(TopLevel::Application,
-                                       SubLevel::Json,
-                                       vec![(Attr::Charset, Value::Utf8)]))])
-    );
-    headers.set(ContentType(Mime(TopLevel::Application,
-                                 SubLevel::Json,
-                                 vec![(Attr::Charset, Value::Utf8)]))
-    );
-
-    if settings.patchwork.user.is_some() {
-        headers.set(Authorization(Basic {
-            // This unwrap is fine since we know it will work
-            username: settings.patchwork.user.clone().unwrap(),
-            password: settings.patchwork.pass.clone()
-        }));
-    }
-    // Make sure the repository is starting at the base branch
+    // Make sure each project repository is starting at the base branch
     for (_, config) in settings.projects.iter() {
         let repo = config.get_repo().unwrap();
         git::checkout_branch(&repo, &config.branch);
     }
 
+    let mut patchwork = PatchworkServer::new(&settings.patchwork.url, &client);
+    if settings.patchwork.user.is_some() {
+        patchwork.set_authentication(&settings.patchwork.user.clone().unwrap(),
+                                     &settings.patchwork.pass.clone());
+    }
+    let patchwork = patchwork;
+
+    // Poll patchwork for new series. For each series, get patches, apply and test.
     loop {
-        // Connect to the Patchwork API
-        let url = format!("{}{}/series/{}", &settings.patchwork.url, PATCHWORK_API, PATCHWORK_QUERY);
-        let mut resp = client.get(&*url).headers(headers.clone()).header(Connection::close()).send().unwrap();
-        // Copy the body into our buffer
-        let mut body: Vec<u8> = vec![];
-        io::copy(&mut resp, &mut body).unwrap();
-        // Convert the body into a string so we can decode it
-        let body_str = str::from_utf8(&body).unwrap();
-        // Decode the json string into our Series struct
-        let decoded: Series = json::decode(body_str).unwrap();
-        // Get our results: the list of patch series the API gave us
-        let results = decoded.results.unwrap();
-        println!("{}", body_str);
-        /*
-         * For each series, get patches and apply and test...
-         * This section is running on the main thread.  The reason for this is
-         * all git operations would need to be bound by a mutex anyway, so handle
-         * everything before we have a remote with our patches on the main thread.
-         */
-        for i in 0..results.len() { // TODO: don't use a counter, use a nice for loop
-            let settings = settings.clone();
-            let client = client.clone();
-            let headers = headers.clone();
-            let series = results[i].clone();
-            // TODO: this is a horrendous way of continuing on fail, fix!
-            let project = settings.projects.get(&series.project.name).clone();
-            if !project.is_some() {
-                continue;
+        let series_list = patchwork.get_series_query().results.unwrap();
+        for series in series_list {
+            match settings.projects.get(&series.project.name) {
+                None => continue,
+                Some(project) => {
+                    test_patch(&patchwork, &settings, &project, &series, &project.get_repo().unwrap());
+                }
             }
-            let settings = settings.clone();
-            let project = settings.projects.get(&series.project.name).unwrap().clone();
-            let repo = project.get_repo().unwrap();
-            let series = results[i].clone();
-            test_patch(&settings, &project, &client.clone(), &series, &headers, &repo);
         }
-        thread::sleep(Duration::new(settings.patchwork.polling_interval,0));
+        thread::sleep(Duration::new(settings.patchwork.polling_interval, 0));
     }
 }
