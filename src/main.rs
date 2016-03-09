@@ -24,11 +24,6 @@ extern crate docopt;
 use git2::{Cred, Repository, BranchType, RemoteCallbacks, PushOptions};
 
 use hyper::Client;
-use hyper::header::Connection;
-use hyper::header::{Headers, Accept, ContentType, qitem, Authorization, Basic};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
-
-use rustc_serialize::json::{self};
 
 use tempdir::TempDir;
 
@@ -36,14 +31,13 @@ use docopt::Docopt;
 
 use std::io;
 use std::fs::File;
-use std::str;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 mod patchwork;
-use patchwork::{Series, TestState, TestResult, PATCHWORK_API, PATCHWORK_QUERY};
+use patchwork::{PatchworkServer, TestState, TestResult};
 
 mod jenkins;
 use jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
@@ -113,7 +107,7 @@ fn run_test(settings: &Config, project: &Project, tag: &str) {
     }
 }
 
-fn test_patch(settings: &Config, project: &Project, client: &Client, series: &patchwork::Result, headers: &Headers, repo: &Repository) {
+fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project, series: &patchwork::Result, repo: &Repository) {
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|_, _, _| {
@@ -121,13 +115,12 @@ fn test_patch(settings: &Config, project: &Project, client: &Client, series: &pa
     });
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(callbacks);
-    
-    let client = client.clone();
+
     let mut path = TempDir::new("snowpatch").unwrap().into_path();
     let tag = format!("{}-{}-{}", series.submitter.name, series.id, series.version).replace(" ", "_");
     path.push(format!("{}.mbox", tag));
-    let mbox_url = format!("{}{}/series/{}/revisions/{}/mbox/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version);
-    let mut mbox_resp = client.get(&*mbox_url).headers(headers.clone()).header(Connection::close()).send().unwrap();
+
+    let mut mbox_resp = patchwork.get_series_mbox(&series.id, &series.version).unwrap();
     println!("Opening file {}", path.display());
     let mut mbox = File::create(&path).unwrap();
     println!("Writing to file...");
@@ -166,8 +159,9 @@ fn test_patch(settings: &Config, project: &Project, client: &Client, series: &pa
                 url: None,
                 summary: Some("Successfully applied".to_string()),
             };
+            patchwork.post_test_result(test_result, &series.id, &series.version);
         },
-        Err(e) => {
+        Err(_) => {
             // It didn't apply.  No need to bother testing.
             test_result = TestResult {
                 test_name: "apply_patch".to_string(),
@@ -175,25 +169,16 @@ fn test_patch(settings: &Config, project: &Project, client: &Client, series: &pa
                 url: None,
                 summary: Some("Series failed to apply to branch".to_string()),
             };
-            // TODO: Post...
-            //return test_result;
+            patchwork.post_test_result(test_result, &series.id, &series.version);
             return;
         }
     }
 
-    let headers = headers.clone();
     let settings = settings.clone();
     let project = project.clone();
     let settings_clone = settings.clone();
     // We've set up a remote branch, time to kick off tests
     thread::spawn(move || { run_test(&settings_clone, &project, &tag); }); // TODO: Get result
-    
-    // Encode our result into JSON
-    let encoded = json::encode(&test_result).unwrap();
-    println!("{}", encoded);
-    // Send the result to the API
-    let res = client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &settings.patchwork.url, PATCHWORK_API, series.id, series.version)).headers(headers).body(&encoded).send().unwrap();
-    assert_eq!(res.status, hyper::status::StatusCode::Created);
 }
 
 fn main() {
@@ -207,54 +192,30 @@ fn main() {
     let client_base = Arc::new(Client::new());
     let client = client_base.clone();
 
-    let mut headers = Headers::new();
-    headers.set(Accept(vec![qitem(Mime(TopLevel::Application,
-                                       SubLevel::Json,
-                                       vec![(Attr::Charset, Value::Utf8)]))])
-    );
-    headers.set(ContentType(Mime(TopLevel::Application,
-                                 SubLevel::Json,
-                                 vec![(Attr::Charset, Value::Utf8)]))
-    );
-
-    if settings.patchwork.user.is_some() {
-        headers.set(Authorization(Basic {
-            // This unwrap is fine since we know it will work
-            username: settings.patchwork.user.clone().unwrap(),
-            password: settings.patchwork.pass.clone()
-        }));
-    }
     // Make sure the repository is starting at the base branch
     for (_, config) in settings.projects.iter() {
         let repo = config.get_repo().unwrap();
         git::checkout_branch(&repo, &config.branch);
     }
 
+    let mut patchwork = PatchworkServer::new(&settings.patchwork.url, &client);
+    if settings.patchwork.user.is_some() {
+        patchwork.set_authentication(&settings.patchwork.user.clone().unwrap(),
+                                     &settings.patchwork.pass.clone());
+    }
+
     loop {
-        // Connect to the Patchwork API
-        let url = format!("{}{}/series/{}", &settings.patchwork.url, PATCHWORK_API, PATCHWORK_QUERY);
-        let mut resp = client.get(&*url).headers(headers.clone()).header(Connection::close()).send().unwrap();
-        // Copy the body into our buffer
-        let mut body: Vec<u8> = vec![];
-        io::copy(&mut resp, &mut body).unwrap();
-        // Convert the body into a string so we can decode it
-        let body_str = str::from_utf8(&body).unwrap();
-        // Decode the json string into our Series struct
-        let decoded: Series = json::decode(body_str).unwrap();
-        // Get our results: the list of patch series the API gave us
-        let results = decoded.results.unwrap();
-        println!("{}", body_str);
+        let series_list = patchwork.get_series_query().results.unwrap();
         /*
          * For each series, get patches and apply and test...
          * This section is running on the main thread.  The reason for this is
          * all git operations would need to be bound by a mutex anyway, so handle
          * everything before we have a remote with our patches on the main thread.
          */
-        for i in 0..results.len() { // TODO: don't use a counter, use a nice for loop
+        for i in 0..series_list.len() { // TODO: don't use a counter, use a nice for loop
             let settings = settings.clone();
-            let client = client.clone();
-            let headers = headers.clone();
-            let series = results[i].clone();
+            //let headers = headers.clone();
+            let series = series_list[i].clone();
             // TODO: this is a horrendous way of continuing on fail, fix!
             let project = settings.projects.get(&series.project.name).clone();
             if !project.is_some() {
@@ -263,8 +224,8 @@ fn main() {
             let settings = settings.clone();
             let project = settings.projects.get(&series.project.name).unwrap().clone();
             let repo = project.get_repo().unwrap();
-            let series = results[i].clone();
-            test_patch(&settings, &project, &client.clone(), &series, &headers, &repo);
+            let series = series_list[i].clone();
+            test_patch(&patchwork, &settings, &project, &series, &repo);
         }
         thread::sleep(Duration::new(settings.patchwork.polling_interval,0));
     }
