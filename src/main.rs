@@ -69,7 +69,7 @@ Options:
 #[derive(RustcDecodable)]
 struct Args {
     arg_config_file: String,
-    flag_count: u8,
+    flag_count: u16,
     flag_mbox: String,
 }
 
@@ -214,14 +214,24 @@ fn main() {
     }
     let patchwork = patchwork;
 
+    // The number of series tested so far.  If --count isn't provided, this is unused.
+    let mut series_count = 0;
+
     // Poll patchwork for new series. For each series, get patches, apply and test.
-    loop {
+    'daemon: loop {
         let series_list = patchwork.get_series_query().results.unwrap();
         for series in series_list {
             match settings.projects.get(&series.project.name) {
                 None => continue,
                 Some(project) => {
-                    test_patch(&patchwork, &settings, &project, &series, &project.get_repo().unwrap());
+                    test_patch(&patchwork, &settings, &project, &series,
+                               &project.get_repo().unwrap());
+                    if args.flag_count > 0 {
+                        series_count += 1;
+                        if series_count >= args.flag_count {
+                            break 'daemon;
+                        }
+                    }
                 }
             }
         }
