@@ -34,7 +34,6 @@ port = 443
     branch = "master" # the branch to base from
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/skiboot.git"
-    jobs = {}
     push_results = true
 
     [projects.linuxppc-dev]
