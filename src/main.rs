@@ -52,21 +52,24 @@ mod git;
 use git::GIT_REF_BASE;
 
 static USAGE: &'static str = "
-Usage: snowpatch [options] [<config-file>]
+Usage:
+	snowpatch <config-file> [--count=<count> | --mbox=<mbox>]
+	snowpatch -v | --version
+	snowpatch -h | --help
 
 By default, snowpatch runs as a long-running daemon.
 
 Options:
-	-n, --count <count>  Run tests on <count> recent series and exit.
-	-f, --mbox <mbox>    Run tests on the given mbox file and exit.
-	-v, --version        Output version information and exit.
-	-h, --help           Output this help text and exit.
+	--count <count>    Run tests on <count> recent series and exit.
+	--mbox <mbox>      Run tests on the given mbox file and exit.
+	-v, --version      Output version information and exit.
+	-h, --help         Output this help text and exit.
 ";
 
 #[derive(RustcDecodable)]
 struct Args {
     arg_config_file: String,
-    flag_count: u8,
+    flag_count: u16,
     flag_mbox: String,
 }
 
@@ -211,14 +214,24 @@ fn main() {
     }
     let patchwork = patchwork;
 
+    // The number of series tested so far.  If --count isn't provided, this is unused.
+    let mut series_count = 0;
+
     // Poll patchwork for new series. For each series, get patches, apply and test.
-    loop {
+    'daemon: loop {
         let series_list = patchwork.get_series_query().results.unwrap();
         for series in series_list {
             match settings.projects.get(&series.project.name) {
                 None => continue,
                 Some(project) => {
-                    test_patch(&patchwork, &settings, &project, &series, &project.get_repo().unwrap());
+                    test_patch(&patchwork, &settings, &project, &series,
+                               &project.get_repo().unwrap());
+                    if args.flag_count > 0 {
+                        series_count += 1;
+                        if series_count >= args.flag_count {
+                            break 'daemon;
+                        }
+                    }
                 }
             }
         }
