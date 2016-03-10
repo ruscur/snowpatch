@@ -122,7 +122,7 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(callbacks);
 
-    let mut dir = TempDir::new("snowpatch").unwrap().into_path();
+    let dir = TempDir::new("snowpatch").unwrap().into_path();
     let mut path = dir.clone();
     let tag = format!("{}-{}-{}", series.submitter.name, series.id, series.version).replace(" ", "_");
     path.push(format!("{}.mbox", tag));
@@ -170,7 +170,7 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
                 url: None,
                 summary: Some("Successfully applied".to_string()),
             };
-            patchwork.post_test_result(test_result, &series.id, &series.version);
+            patchwork.post_test_result(test_result, &series.id, &series.version).ok();
         },
         Err(_) => {
             // It didn't apply.  No need to bother testing.
@@ -180,7 +180,7 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
                 url: None,
                 summary: Some("Series failed to apply to branch".to_string()),
             };
-            patchwork.post_test_result(test_result, &series.id, &series.version);
+            patchwork.post_test_result(test_result, &series.id, &series.version).ok();
             return;
         }
     }
