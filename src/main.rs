@@ -32,6 +32,7 @@ use tempdir::TempDir;
 use docopt::Docopt;
 
 use std::io;
+use std::fs;
 use std::fs::File;
 use std::string::String;
 use std::sync::Arc;
@@ -97,7 +98,7 @@ fn run_test(settings: &Config, project: &Project, tag: &str) {
             }
         }
         println!("Build URL: {}", build_url_real);
-        
+
         loop {
             let status = jenkins.get_build_status(&build_url_real);
             match status  {
@@ -118,7 +119,8 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(callbacks);
 
-    let mut path = TempDir::new("snowpatch").unwrap().into_path();
+    let mut dir = TempDir::new("snowpatch").unwrap().into_path();
+    let mut path = dir.clone();
     let tag = format!("{}-{}-{}", series.submitter.name, series.id, series.version).replace(" ", "_");
     path.push(format!("{}.mbox", tag));
 
@@ -138,6 +140,10 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
     println!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
 
     let output = git::apply_patch(&repo, &path);
+
+    // Whether the apply worked or not, we don't need the patches any more.
+    fs::remove_dir_all(dir).unwrap_or_else(
+        |err| println!("Couldn't delete temp directory: {}", err));
     match output {
         Ok(_) => {
             let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
@@ -145,7 +151,7 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
         }
         _ => {}
     }
-    
+
     git::checkout_branch(&repo, &project.branch);
     // we need to find the branch again since its head has moved
     branch = repo.find_branch(&tag, BranchType::Local).unwrap();
@@ -187,7 +193,6 @@ fn main() {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
-
     let settings = settings::parse(args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
