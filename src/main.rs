@@ -52,15 +52,18 @@ mod git;
 use git::GIT_REF_BASE;
 
 static USAGE: &'static str = "
-Usage: snowpatch [options] [<config-file>]
+Usage:
+	snowpatch <config-file> [--count=<count> | --mbox=<mbox>]
+	snowpatch -v | --version
+	snowpatch -h | --help
 
 By default, snowpatch runs as a long-running daemon.
 
 Options:
-	-n, --count <count>  Run tests on <count> recent series and exit.
-	-f, --mbox <mbox>    Run tests on the given mbox file and exit.
-	-v, --version        Output version information and exit.
-	-h, --help           Output this help text and exit.
+	--count <count>    Run tests on <count> recent series and exit.
+	--mbox <mbox>      Run tests on the given mbox file and exit.
+	-v, --version      Output version information and exit.
+	-h, --help         Output this help text and exit.
 ";
 
 #[derive(RustcDecodable)]
