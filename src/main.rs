@@ -97,7 +97,7 @@ fn run_test(settings: &Config, project: &Project, tag: &str) {
             }
         }
         println!("Build URL: {}", build_url_real);
-        
+
         loop {
             let status = jenkins.get_build_status(&build_url_real);
             match status  {
@@ -145,7 +145,7 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
         }
         _ => {}
     }
-    
+
     git::checkout_branch(&repo, &project.branch);
     // we need to find the branch again since its head has moved
     branch = repo.find_branch(&tag, BranchType::Local).unwrap();
@@ -187,7 +187,6 @@ fn main() {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
-
     let settings = settings::parse(args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs

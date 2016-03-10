@@ -32,18 +32,14 @@ use rustc_serialize::json::Json;
 
 // Jenkins API definitions
 
-
 pub trait CIBackend { // TODO: Separate out
     fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>) -> Result<String, &'static str>;
 }
-
 
 pub struct JenkinsBackend<'a> {
     pub base_url: &'a str,
     // TODO: Authentication
 }
-
-
 
 impl<'a> CIBackend for JenkinsBackend<'a> {
     /// Start a Jenkins build
