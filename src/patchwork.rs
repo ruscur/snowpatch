@@ -18,7 +18,13 @@ use std;
 use std::io::{self};
 use std::str;
 use std::option::Option;
+use std::path::PathBuf;
+use std::fs::File;
+use std::result::Result;
 
+use tempdir::TempDir;
+
+// TODO: this line is required here, but why?
 extern crate hyper;
 use hyper::Client;
 use hyper::header::{Connection, Headers, Accept, ContentType, qitem, Authorization, Basic};
@@ -26,7 +32,9 @@ use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use hyper::status::StatusCode;
 use hyper::client::response::Response;
 
-use rustc_serialize::json::{self};
+use rustc_serialize::json::{self, DecoderError};
+
+use utils;
 
 // TODO: more constants.  constants for format strings of URLs and such.
 pub static PATCHWORK_API: &'static str = "/api/1.0";
@@ -52,7 +60,7 @@ pub struct Submitter {
 }
 
 #[derive(RustcDecodable, Clone)]
-pub struct Result {
+pub struct Series {
     pub id: u64,
     pub project: Project,
     pub name: String,
@@ -66,11 +74,11 @@ pub struct Result {
 }
 
 #[derive(RustcDecodable)]
-pub struct Series {
+pub struct SeriesList {
     pub count: u64,
     pub next: Option<String>,
     pub previous: Option<String>,
-    pub results: Option<Vec<Result>>
+    pub results: Option<Vec<Series>>
 }
 
 pub enum TestState {
@@ -131,29 +139,69 @@ impl PatchworkServer {
         }));
     }
 
-    pub fn post_test_result(&self, result: TestResult, series_id: &u64, series_version: &u64) -> std::result::Result<StatusCode, hyper::error::Error> {
+    pub fn post_test_result(&self, result: TestResult,
+                            series_id: &u64, series_revision: &u64)
+                            -> Result<StatusCode, hyper::error::Error> {
         let encoded = json::encode(&result).unwrap();
         let headers = self.headers.clone();
         println!("JSON Encoded: {}", encoded);
-        let res = try!(self.client.post(&format!("{}{}/series/{}/revisions/{}/test-results/", &self.url, PATCHWORK_API, &series_id, &series_version)).headers(headers).body(&encoded).send());
+        let res = try!(self.client.post(&format!(
+            "{}{}/series/{}/revisions/{}/test-results/",
+            &self.url, PATCHWORK_API, &series_id, &series_revision))
+            .headers(headers).body(&encoded).send());
         assert_eq!(res.status, hyper::status::StatusCode::Created);
-        return Ok(res.status);
+        Ok(res.status)
     }
 
-    pub fn get_series_mbox(&self, series_id: &u64, series_version: &u64) -> std::result::Result<Response, hyper::error::Error> {
-        let mbox_url = format!("{}{}/series/{}/revisions/{}/mbox/", &self.url, PATCHWORK_API, series_id, series_version);
-        self.client.get(&*mbox_url).headers(self.headers.clone()).header(Connection::close()).send()
+    pub fn get_series(&self, series_id: &u64) -> Result<Series, DecoderError> {
+        let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
+                          series_id, PATCHWORK_QUERY);
+        let mut resp = self.client.get(&*url).headers(self.headers.clone())
+            .header(Connection::close()).send().unwrap();
+        let mut body: Vec<u8> = vec![];
+        io::copy(&mut resp, &mut body).unwrap();
+        let body_str = str::from_utf8(&body).unwrap();
+        json::decode(body_str)
     }
 
-    pub fn get_series_query(&self) -> Series {
-        let url = format!("{}{}/series/{}", &self.url, PATCHWORK_API, PATCHWORK_QUERY);
-        let mut resp = self.client.get(&*url).headers(self.headers.clone()).header(Connection::close()).send().unwrap();
+    pub fn get_series_mbox(&self, series_id: &u64, series_revision: &u64)
+                           -> std::result::Result<Response, hyper::error::Error> {
+        let url = format!("{}{}/series/{}/revisions/{}/mbox/",
+                               &self.url, PATCHWORK_API, series_id, series_revision);
+        self.client.get(&*url).headers(self.headers.clone())
+            .header(Connection::close()).send()
+    }
+
+    pub fn get_series_query(&self) -> Result<SeriesList, DecoderError> {
+        let url = format!("{}{}/series/{}", &self.url,
+                          PATCHWORK_API, PATCHWORK_QUERY);
+        let mut resp = self.client.get(&*url).headers(self.headers.clone())
+            .header(Connection::close()).send().unwrap();
         // Copy the body into our buffer
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         // Convert the body into a string so we can decode it
         let body_str = str::from_utf8(&body).unwrap();
-        // Decode the json string into our Series struct
-        json::decode(body_str).unwrap()
+        // Decode the json string into our SeriesList struct
+        json::decode(body_str)
+    }
+
+    pub fn get_patch(&self, series: &Series) -> PathBuf {
+        let dir = TempDir::new("snowpatch").unwrap().into_path();
+        let mut path = dir.clone();
+        let tag = utils::sanitise_path(
+            format!("{}-{}-{}", series.submitter.name,
+                    series.id, series.version));
+        path.push(format!("{}.mbox", tag));
+
+        let mut mbox_resp = self.get_series_mbox(&series.id, &series.version)
+            .unwrap();
+
+        println!("Saving patch to file {}", path.display());
+        let mut mbox = File::create(&path).unwrap_or_else(
+            |err| panic!("Couldn't create mbox file: {}", err));
+        io::copy(&mut mbox_resp, &mut mbox).unwrap_or_else(
+            |err| panic!("Couldn't save mbox from Patchwork: {}", err));
+        path
     }
 }

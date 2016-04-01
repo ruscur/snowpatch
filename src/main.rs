@@ -51,6 +51,8 @@ use settings::{Config, Project};
 mod git;
 use git::GIT_REF_BASE;
 
+mod utils;
+
 static USAGE: &'static str = "
 Usage:
 	snowpatch <config-file> [--count=<count> | --mbox=<mbox>]
