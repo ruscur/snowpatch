@@ -26,13 +26,27 @@ creation of snowpatch.
 Contributing
 ============
 
-All commit messages must include a Signed-off-by: line, indicating that you have
-read and agree to the [Developer Certificate of
-Origin v1.1](http://developercertificate.org).
+Contributions should be sent as patches to the mailing list (see
+Contact below), using `git send-email`.
+
+All commit messages must include a Signed-off-by: line, indicating
+that you have read and agree to the
+[Developer Certificate of Origin v1.1](http://developercertificate.org).
+
+Please read the Linux kernel
+[SubmittingPatches](https://www.kernel.org/doc/Documentation/SubmittingPatches)
+guidance before contributing. While many of the rules in there
+obviously aren't relevant to snowpatch, a lot of the guidance is
+relevant.
 
 
 Contact
 =======
+
+snowpatch development is done on our mailing list,
+[snowpatch@lists.ozlabs.org](mailto:snowpatch@lists.ozlabs.org). To
+subscribe, go to the
+[listinfo page](https://lists.ozlabs.org/listinfo/snowpatch).
 
 snowpatch is maintained by
 [Russell Currey](mailto:ruscur@russell.cc) and
