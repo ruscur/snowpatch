@@ -14,7 +14,7 @@
 // git.rs - snowpatch git functionality
 //
 
-use git2::{Repository, Commit};
+use git2::{Repository, Commit, Remote, Error, PushOptions};
 use git2::build::CheckoutBuilder;
 
 use std::result::Result;
@@ -29,6 +29,32 @@ pub fn get_latest_commit(repo: &Repository) -> Commit {
     return repo.find_commit(oid).unwrap();
 }
 
+pub fn push_to_remote(remote: &mut Remote, branch: &str,
+                      mut opts: &mut PushOptions)
+                      -> Result<(), Error> {
+    let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, branch)];
+    remote.push(refspecs, Some(&mut opts))
+}
+
+// TODO: rewrite this to use git2-rs, I think it's impossible currently
+pub fn pull(repo: &Repository) -> Result<Output, &'static str> {
+    let workdir = repo.workdir().unwrap(); // TODO: support bare repositories
+
+    let output = Command::new("git")
+        .arg("pull") // pull the cool kid's way
+        .current_dir(&workdir) // in the repo's working directory
+        .output() // run synchronously
+        .unwrap(); // TODO
+
+    if output.status.success() {
+        println!("Pull: {}", String::from_utf8(output.clone().stdout).unwrap());
+        return Ok(output);
+    } else {
+        return Err("Error: couldn't pull changes");
+    }
+
+}
+
 pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
     repo.set_head(&format!("{}/{}", GIT_REF_BASE, &branch))
         .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
@@ -36,7 +62,8 @@ pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
         .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
 }
 
-pub fn apply_patch(repo: &Repository, path: &Path) -> Result<Output, &'static str> {
+pub fn apply_patch(repo: &Repository, path: &Path)
+                   -> Result<Output, &'static str> {
     let workdir = repo.workdir().unwrap(); // TODO: support bare repositories
 
     // We call out to "git am" since libgit2 doesn't implement "am"
@@ -48,10 +75,21 @@ pub fn apply_patch(repo: &Repository, path: &Path) -> Result<Output, &'static st
         .unwrap(); // TODO
 
     if output.status.success() {
-        println!("Patch applied with text {}", String::from_utf8(output.clone().stdout).unwrap());
+        println!("Patch applied with text {}",
+                 String::from_utf8(output.clone().stdout).unwrap());
         return Ok(output);
     } else {
-        Command::new("git").arg("am").arg("--abort").current_dir(&workdir).output().unwrap();
+        Command::new("git").arg("am").arg("--abort")
+            .current_dir(&workdir).output().unwrap();
         return Err("Patch did not apply successfully");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use git::get_latest_commit;
+
+    #[test]
+    fn get_commit() {
     }
 }
