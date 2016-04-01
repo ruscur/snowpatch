@@ -23,21 +23,18 @@ extern crate toml;
 extern crate tempdir;
 extern crate docopt;
 
-use git2::{Cred, Repository, BranchType, RemoteCallbacks, PushOptions};
+use git2::{Cred, BranchType, RemoteCallbacks, PushOptions};
 
 use hyper::Client;
 
-use tempdir::TempDir;
-
 use docopt::Docopt;
 
-use std::io;
 use std::fs;
-use std::fs::File;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use std::path::Path;
 
 mod patchwork;
 use patchwork::{PatchworkServer, TestState, TestResult};
@@ -49,31 +46,38 @@ mod settings;
 use settings::{Config, Project};
 
 mod git;
-use git::GIT_REF_BASE;
+
+mod utils;
 
 static USAGE: &'static str = "
 Usage:
-	snowpatch <config-file> [--count=<count> | --mbox=<mbox>]
-	snowpatch -v | --version
-	snowpatch -h | --help
+  snowpatch <config-file> [--count=<count> | --series <id>]
+  snowpatch <config-file> --mbox=<mbox> --project=<name>
+  snowpatch -v | --version
+  snowpatch -h | --help
 
 By default, snowpatch runs as a long-running daemon.
 
 Options:
-	--count <count>    Run tests on <count> recent series and exit.
-	--mbox <mbox>      Run tests on the given mbox file and exit.
-	-v, --version      Output version information and exit.
-	-h, --help         Output this help text and exit.
+  --count <count>           Run tests on <count> recent series.
+  --series <id>             Run tests on the given Patchwork series.
+  --mbox <mbox>             Run tests on the given mbox file...
+  --project <name>          ...as if it were sent to project <name>.
+  -v, --version             Output version information.
+  -h, --help                Output this help text.
 ";
 
 #[derive(RustcDecodable)]
 struct Args {
     arg_config_file: String,
     flag_count: u16,
+    flag_series: u32,
     flag_mbox: String,
+    flag_project: String,
 }
 
-fn run_test(settings: &Config, project: &Project, tag: &str) {
+fn run_tests(settings: &Config, project: &Project, tag: &str) -> Vec<TestResult> {
+    let mut results: Vec<TestResult> = Vec::new();
     let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
     let project = project.clone();
     for job_params in project.jobs.iter() {
@@ -90,7 +94,8 @@ fn run_test(settings: &Config, project: &Project, tag: &str) {
             }
         }
         println!("Starting job: {}", &job_name);
-        let res = jenkins.start_test(&job_name, jenkins_params).unwrap();
+        let res = jenkins.start_test(&job_name, jenkins_params)
+            .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
         println!("{:?}", &res);
         let build_url_real;
         loop {
@@ -110,30 +115,39 @@ fn run_test(settings: &Config, project: &Project, tag: &str) {
             }
         }
         println!("Job done!");
+        results.push(TestResult {
+            test_name: job_name.to_string(),
+            state: TestState::SUCCESS.string(), // TODO: get this from Jenkins
+            url: None, // TODO: link to Jenkins job log
+            summary: Some("TODO: get this summary from Jenkins".to_string()),
+        });
     }
+    results
 }
 
-fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project, series: &patchwork::Result, repo: &Repository) {
+fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResult> {
+    let repo = project.get_repo().unwrap();
+    let mut results: Vec<TestResult> = Vec::new();
+    if !path.is_file() {
+        return results;
+    }
+    let tag = utils::sanitise_path(
+        path.file_name().unwrap().to_str().unwrap().to_string());
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
-    let mut callbacks = RemoteCallbacks::new();
-    callbacks.credentials(|_, _, _| {
+    let commit = git::get_latest_commit(&repo);
+
+    let mut push_callbacks = RemoteCallbacks::new();
+    push_callbacks.credentials(|_, _, _| {
         return Cred::ssh_key_from_agent("git");
     });
+
     let mut push_opts = PushOptions::new();
-    push_opts.remote_callbacks(callbacks);
+    push_opts.remote_callbacks(push_callbacks);
 
-    let dir = TempDir::new("snowpatch").unwrap().into_path();
-    let mut path = dir.clone();
-    let tag = format!("{}-{}-{}", series.submitter.name, series.id, series.version).replace(" ", "_");
-    path.push(format!("{}.mbox", tag));
+    // Make sure we're up to date
+    git::pull(&repo).unwrap();
 
-    let mut mbox_resp = patchwork.get_series_mbox(&series.id, &series.version).unwrap();
-    println!("Opening file {}", path.display());
-    let mut mbox = File::create(&path).unwrap();
-    println!("Writing to file...");
-    io::copy(&mut mbox_resp, &mut mbox).unwrap();
     println!("Creating a new branch...");
-    let commit = git::get_latest_commit(&repo);
     let mut branch = repo.branch(&tag, &commit, true).unwrap();
     println!("Switching to branch...");
     repo.set_head(branch.get().name().unwrap())
@@ -144,14 +158,9 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
 
     let output = git::apply_patch(&repo, &path);
 
-    // Whether the apply worked or not, we don't need the patches any more.
-    fs::remove_dir_all(dir).unwrap_or_else(
-        |err| println!("Couldn't delete temp directory: {}", err));
     match output {
-        Ok(_) => {
-            let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, tag)];
-            remote.push(refspecs, Some(&mut push_opts)).unwrap();
-        }
+        Ok(_) => git::push_to_remote(
+            &mut remote, &tag, &mut push_opts).unwrap(),
         _ => {}
     }
 
@@ -161,27 +170,24 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
     branch.delete().unwrap();
     println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
 
-    let test_result;
     match output {
         Ok(_) => {
-            test_result = TestResult {
+            results.push(TestResult {
                 test_name: "apply_patch".to_string(),
                 state: TestState::SUCCESS.string(),
                 url: None,
                 summary: Some("Successfully applied".to_string()),
-            };
-            patchwork.post_test_result(test_result, &series.id, &series.version).ok();
+            });
         },
         Err(_) => {
             // It didn't apply.  No need to bother testing.
-            test_result = TestResult {
+            results.push(TestResult {
                 test_name: "apply_patch".to_string(),
                 state: TestState::FAILURE.string(),
                 url: None,
                 summary: Some("Series failed to apply to branch".to_string()),
-            };
-            patchwork.post_test_result(test_result, &series.id, &series.version).ok();
-            return;
+            });
+            return results;
         }
     }
 
@@ -189,7 +195,11 @@ fn test_patch(patchwork: &PatchworkServer, settings: &Config, project: &Project,
     let project = project.clone();
     let settings_clone = settings.clone();
     // We've set up a remote branch, time to kick off tests
-    thread::spawn(move || { run_test(&settings_clone, &project, &tag); }); // TODO: Get result
+    let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
+        return run_tests(&settings_clone, &project, &tag);
+    }).unwrap();
+    results.append(&mut test.join().unwrap());
+    results
 }
 
 fn main() {
@@ -214,18 +224,52 @@ fn main() {
     }
     let patchwork = patchwork;
 
+    if args.flag_mbox != "" && args.flag_project != "" {
+        let patch = Path::new(&args.flag_mbox);
+        match settings.projects.get(&args.flag_project) {
+            None => panic!("Couldn't find project {}", args.flag_project),
+            Some(project) => {
+                test_patch(&settings, &project, &patch);
+            }
+        }
+
+        return;
+    }
+
+    if args.flag_series > 0 {
+        let series = patchwork.get_series(&(args.flag_series as u64)).unwrap();
+        match settings.projects.get(&series.project.name) {
+            None => panic!("Couldn't find project {}", &series.project.name),
+            Some(project) => {
+                let patch = patchwork.get_patch(&series);
+                test_patch(&settings, &project, &patch);
+            }
+        }
+
+        return;
+    }
+
     // The number of series tested so far.  If --count isn't provided, this is unused.
     let mut series_count = 0;
 
     // Poll patchwork for new series. For each series, get patches, apply and test.
     'daemon: loop {
-        let series_list = patchwork.get_series_query().results.unwrap();
+        let series_list = patchwork.get_series_query().unwrap().results.unwrap();
         for series in series_list {
             match settings.projects.get(&series.project.name) {
                 None => continue,
                 Some(project) => {
-                    test_patch(&patchwork, &settings, &project, &series,
-                               &project.get_repo().unwrap());
+                    let patch = patchwork.get_patch(&series);
+                    let results = test_patch(&settings, &project, &patch);
+                    // Delete the temporary directory with the patch in it
+                    fs::remove_dir_all(patch.parent().unwrap()).unwrap_or_else(
+                        |err| println!("Couldn't delete temp directory: {}", err));
+                    if project.push_results {
+                        for result in results {
+                            patchwork.post_test_result(result, &series.id,
+                                                       &series.version).unwrap();
+                        }
+                    }
                     if args.flag_count > 0 {
                         series_count += 1;
                         if series_count >= args.flag_count {

@@ -34,14 +34,14 @@ port = 443
     branch = "master" # the branch to base from
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/skiboot.git"
-    push_results = true
+    push_results = false
 
     [projects.linuxppc-dev]
     repository = "/home/ruscur/Documents/linux"
     branch = "master" # TODO: multiple merge branches
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/linux.git"
-    push_results = true
+    push_results = false
 
         [[projects.linuxppc-dev.jobs]]
         job = "linux-build-manual"

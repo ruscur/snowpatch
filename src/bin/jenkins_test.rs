@@ -27,13 +27,13 @@ fn main() {
     let jenkins = JenkinsBackend { base_url: "https://jenkins.ozlabs.ibm.com" };
     let res = jenkins.start_test("linux-build-manual", vec![("USER_EMAIL", "ajd")]);
     let mut build_queue_location = String::new();
-    
+
     match res {
         Ok(loc) => {
             println!("Location: {}", loc);
             build_queue_location = loc;
         }
-            
+
         Err(e) => {
             println!("{:?}", e);
             return;
@@ -58,8 +58,8 @@ fn main() {
         let build_status = jenkins.get_build_status(&build_url);
         match build_status {
             JenkinsBuildStatus::Running => {},
-            JenkinsBuildStatus::Done => {println!{"DONE!"}; break},
+            JenkinsBuildStatus::Done => {println!("DONE!"); break},
         }
-        
-    }   
+
+    }
 }
