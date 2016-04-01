@@ -1,9 +1,9 @@
-snowpatch - continuous integration for patch-based workflows
-============================================================
+snowpatch - CI for patches
+==========================
 
 
 Overview
-========
+-------
 
 snowpatch is a continuous integration tool for projects using a patch-based,
 mailing-list-centric git workflow. This workflow is used by a number of
@@ -24,7 +24,7 @@ creation of snowpatch.
 
 
 Installing
-==========
+----------
 
 snowpatch is a [Rust](https://www.rust-lang.org) program.  In order to compile 
 it, you will need Rust and its package manager, Cargo.  snowpatch should run 
@@ -40,7 +40,7 @@ snowpatch can be compiled with `cargo build --release`, which will make
 
 
 Contributing
-============
+------------
 
 Contributions should be sent as patches to the mailing list (see
 Contact below), using `git send-email`.
@@ -57,7 +57,7 @@ relevant.
 
 
 Contact
-=======
+------
 
 snowpatch development is done on our mailing list,
 [snowpatch@lists.ozlabs.org](mailto:snowpatch@lists.ozlabs.org). To
@@ -70,7 +70,7 @@ snowpatch is maintained by
 
 
 License
-=======
+-------
 Copyright © 2016 IBM Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
