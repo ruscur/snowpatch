@@ -49,7 +49,7 @@ pub struct Project {
     pub remote_name: String,
     pub remote_uri: String,
     pub jobs: Vec<BTreeMap<String, String>>,
-    pub push_results: Option<bool>
+    pub push_results: bool
 }
 
 impl Project {
