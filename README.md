@@ -15,12 +15,28 @@ patches, applies patches on top of an existing tree, triggers appropriate
 builds and test suites, and reports the results.
 
 At present, snowpatch supports
-[patchwork](http://jk.ozlabs.org/projects/patchwork) and
+[patchwork-freedesktop](http://github.com/dlespiau/patchwork) and
 [Jenkins](http://jenkins-ci.org).
 
 snowpatch is named in honour of
 [skiboot](https://github.com/open-power/skiboot), the project which inspired the
 creation of snowpatch.
+
+
+Installing
+==========
+
+snowpatch is a [Rust](https://www.rust-lang.org) program.  In order to compile 
+it, you will need Rust and its package manager, Cargo.  snowpatch should run 
+on any target that Rust compiles on, however it has only been tested on Linux.
+We do not provide pre-built binaries at this stage.
+
+snowpatch also requires the `git` binary to be installed.  We try to use the 
+[git2-rs](https://github.com/alexcrichton/git2-rs) library where possible,
+however some operations require the binary (such as applying patches).
+
+snowpatch can be compiled with `cargo build --release`, which will make
+`target/release/snowpatch`.
 
 
 Contributing
@@ -53,7 +69,7 @@ snowpatch is maintained by
 [Andrew Donnellan](mailto:andrew.donnellan@au1.ibm.com).
 
 
-Licence
+License
 =======
 Copyright © 2016 IBM Corporation.
 
