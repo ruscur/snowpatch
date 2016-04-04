@@ -1,6 +1,7 @@
 snowpatch - CI for patches
 ==========================
 
+[![Build Status](https://travis-ci.org/ruscur/snowpatch.svg?branch=master)](https://travis-ci.org/ruscur/snowpatch)
 
 Overview
 -------
