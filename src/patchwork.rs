@@ -81,6 +81,8 @@ pub struct SeriesList {
     pub results: Option<Vec<Series>>
 }
 
+// TODO: remove this when we have Jenkins result handling
+#[allow(dead_code)]
 pub enum TestState {
     PENDING,
     SUCCESS,

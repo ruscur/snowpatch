@@ -16,6 +16,9 @@
 
 // TODO: every unwrap() needs to be an unwrap_or_else() or similar
 
+// Equivalent of -Werror
+#![deny(warnings)]
+
 extern crate hyper;
 extern crate rustc_serialize;
 extern crate git2;

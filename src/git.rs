@@ -87,8 +87,6 @@ pub fn apply_patch(repo: &Repository, path: &Path)
 
 #[cfg(test)]
 mod tests {
-    use git::get_latest_commit;
-
     #[test]
     fn get_commit() {
     }
