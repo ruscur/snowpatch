@@ -25,10 +25,15 @@ extern crate url;
 extern crate rustc_serialize;
 
 use std::io::Read;
+use std::time::Duration;
+use std::thread::sleep;
 
 use hyper::Client;
 use hyper::header::Location;
 use rustc_serialize::json::Json;
+
+// Constants
+const JENKINS_POLLING_INTERVAL: u64 = 5000; // Polling interval in milliseconds
 
 // Jenkins API definitions
 
@@ -96,6 +101,17 @@ impl<'a> JenkinsBackend<'a> {
         match json.as_object().unwrap().get("building").unwrap().as_boolean().unwrap() {
             true => JenkinsBuildStatus::Running,
             false => JenkinsBuildStatus::Done,
+        }
+    }
+
+    pub fn wait_build(&self, build_url: &str) -> JenkinsBuildStatus {
+        // TODO: Implement a timeout?
+        loop {
+            match self.get_build_status(&build_url) {
+                JenkinsBuildStatus::Done => return JenkinsBuildStatus::Done,
+                _ => { },
+            }
+            sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
         }
     }
 }

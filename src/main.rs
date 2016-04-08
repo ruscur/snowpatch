@@ -43,7 +43,7 @@ mod patchwork;
 use patchwork::{PatchworkServer, TestState, TestResult};
 
 mod jenkins;
-use jenkins::{JenkinsBackend, CIBackend, JenkinsBuildStatus};
+use jenkins::{JenkinsBackend, CIBackend};
 
 mod settings;
 use settings::{Config, Project};
@@ -109,14 +109,7 @@ fn run_tests(settings: &Config, project: &Project, tag: &str) -> Vec<TestResult>
             }
         }
         println!("Build URL: {}", build_url_real);
-
-        loop {
-            let status = jenkins.get_build_status(&build_url_real);
-            match status  {
-                JenkinsBuildStatus::Done => break,
-                _ => {}
-            }
-        }
+        jenkins.wait_build(&build_url_real);
         println!("Job done!");
         results.push(TestResult {
             test_name: job_name.to_string(),
