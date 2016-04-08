@@ -31,14 +31,16 @@ port = 443
     # the name of the project must be as is in patchwork
     [projects.skiboot]
     repository = "/home/ruscur/Documents/skiboot"
-    branch = "master" # the branch to base from
+    branches = ["master", "stable"] # branches to base from
+    test_all_branches = false
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/skiboot.git"
     push_results = false
 
     [projects.linuxppc-dev]
     repository = "/home/ruscur/Documents/linux"
-    branch = "master" # TODO: multiple merge branches
+    branches = ["master", "powerpc-next"]
+    # test_all_branches defaults to true
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/linux.git"
     push_results = false

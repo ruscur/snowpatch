@@ -147,61 +147,82 @@ fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResu
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(push_callbacks);
 
-    // Make sure we're up to date
-    git::pull(&repo).unwrap();
+    let mut successfully_applied = false;
+    for branch_name in project.branches.clone() {
+        let tag = format!("{}_{}", tag, branch_name);
+        println!("Switching to base branch {}...", branch_name);
+        git::checkout_branch(&repo, &branch_name);
 
-    println!("Creating a new branch...");
-    let mut branch = repo.branch(&tag, &commit, true).unwrap();
-    println!("Switching to branch...");
-    repo.set_head(branch.get().name().unwrap())
-        .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
-    repo.checkout_head(None)
-        .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
-    println!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
+        // Make sure we're up to date
+        git::pull(&repo).unwrap();
 
-    let output = git::apply_patch(&repo, &path);
+        println!("Creating a new branch...");
+        let mut branch = repo.branch(&tag, &commit, true).unwrap();
+        println!("Switching to branch...");
+        repo.set_head(branch.get().name().unwrap())
+            .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
+        repo.checkout_head(None)
+            .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
+        println!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
 
-    match output {
-        Ok(_) => git::push_to_remote(
-            &mut remote, &tag, &mut push_opts).unwrap(),
-        _ => {}
-    }
+        let output = git::apply_patch(&repo, &path);
 
-    git::checkout_branch(&repo, &project.branch);
-    // we need to find the branch again since its head has moved
-    branch = repo.find_branch(&tag, BranchType::Local).unwrap();
-    branch.delete().unwrap();
-    println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
-
-    match output {
-        Ok(_) => {
-            results.push(TestResult {
-                test_name: "apply_patch".to_string(),
-                state: TestState::SUCCESS.string(),
-                url: None,
-                summary: Some("Successfully applied".to_string()),
-            });
-        },
-        Err(_) => {
-            // It didn't apply.  No need to bother testing.
-            results.push(TestResult {
-                test_name: "apply_patch".to_string(),
-                state: TestState::FAILURE.string(),
-                url: None,
-                summary: Some("Series failed to apply to branch".to_string()),
-            });
-            return results;
+        match output {
+            Ok(_) => git::push_to_remote(
+                &mut remote, &tag, &mut push_opts).unwrap(),
+            _ => {}
         }
+
+        git::checkout_branch(&repo, &branch_name);
+        // we need to find the branch again since its head has moved
+        branch = repo.find_branch(&tag, BranchType::Local).unwrap();
+        branch.delete().unwrap();
+        println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
+
+        match output {
+            Ok(_) => {
+                successfully_applied = true;
+                results.push(TestResult {
+                    test_name: "apply_patch".to_string(),
+                    state: TestState::SUCCESS.string(),
+                    url: None,
+                    summary: Some(format!("Successfully applied to branch {}", branch_name)),
+                });
+            },
+            Err(_) => {
+                // It didn't apply.  No need to bother testing.
+                results.push(TestResult {
+                    test_name: "apply_patch".to_string(),
+                    state: TestState::WARNING.string(),
+                    url: None,
+                    summary: Some(format!("Failed to apply to branch {}", branch_name)),
+                });
+                continue;
+            }
+        }
+
+        let settings = settings.clone();
+        let project = project.clone();
+        let settings_clone = settings.clone();
+        let test_all_branches = project.test_all_branches.unwrap_or(true);
+
+        // We've set up a remote branch, time to kick off tests
+        let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
+            return run_tests(&settings_clone, &project, &tag);
+        }).unwrap();
+        results.append(&mut test.join().unwrap());
+
+        if !test_all_branches { break; }
     }
 
-    let settings = settings.clone();
-    let project = project.clone();
-    let settings_clone = settings.clone();
-    // We've set up a remote branch, time to kick off tests
-    let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
-        return run_tests(&settings_clone, &project, &tag);
-    }).unwrap();
-    results.append(&mut test.join().unwrap());
+    if !successfully_applied {
+        results.push(TestResult {
+            test_name: "apply_patch".to_string(),
+            state: TestState::FAILURE.string(),
+            url: None,
+            summary: Some("Failed to apply to any branch".to_string()),
+        });
+    }
     results
 }
 
@@ -213,12 +234,6 @@ fn main() {
 
     // The HTTP client we'll use to access the APIs
     let client = Arc::new(Client::new());
-
-    // Make sure each project repository is starting at the base branch
-    for (_, config) in settings.projects.iter() {
-        let repo = config.get_repo().unwrap();
-        git::checkout_branch(&repo, &config.branch);
-    }
 
     let mut patchwork = PatchworkServer::new(&settings.patchwork.url, &client);
     if settings.patchwork.user.is_some() {

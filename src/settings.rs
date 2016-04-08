@@ -45,7 +45,8 @@ pub struct Jenkins {
 #[derive(RustcDecodable, Clone)]
 pub struct Project {
     pub repository: String,
-    pub branch: String,
+    pub branches: Vec<String>,
+    pub test_all_branches: Option<bool>,
     pub remote_name: String,
     pub remote_uri: String,
     pub jobs: Vec<BTreeMap<String, String>>,
