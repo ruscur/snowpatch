@@ -41,18 +41,8 @@ snowpatch can be compiled with `cargo build --release`, which will make
 Contributing
 ------------
 
-Contributions should be sent as patches to the mailing list (see
-Contact below), using `git send-email`.
-
-All commit messages must include a Signed-off-by: line, indicating
-that you have read and agree to the
-[Developer Certificate of Origin v1.1](http://developercertificate.org).
-
-Please read the Linux kernel
-[SubmittingPatches](https://www.kernel.org/doc/Documentation/SubmittingPatches)
-guidance before contributing. While many of the rules in there
-obviously aren't relevant to snowpatch, a lot of the guidance is
-relevant.
+Please read our [contribution guidelines](CONTRIBUTING.md) for more
+information about contributing.
 
 
 Contact
