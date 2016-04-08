@@ -96,7 +96,8 @@ impl<'a> JenkinsBackend<'a> {
         let mut result_str = String::new();
         resp.read_to_string(&mut result_str)
             .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
-        let json = Json::from_str(&result_str).unwrap();
+        let json = Json::from_str(&result_str)
+            .unwrap_or_else(|err| panic!("Couldn't decode JSON: {}", err));
 
         match json.as_object().unwrap().get("building").unwrap().as_boolean().unwrap() {
             true => JenkinsBuildStatus::Running,
