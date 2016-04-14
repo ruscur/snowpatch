@@ -15,9 +15,11 @@
 //
 
 use toml;
-use toml::{Parser, Value};
+use toml::{Parser, Value, Decoder};
 
 use git2::{Repository, Error};
+
+use rustc_serialize::Decodable;
 
 use std::fs::File;
 use std::io::Read;
@@ -92,8 +94,8 @@ pub fn parse(path: String) -> Config {
 
     let config = Value::Table(toml.unwrap());
 
-    match toml::decode(config) {
-        Some(t) => t,
-        None => panic!("Couldn't deserialize config, exiting.")
+    match Config::decode::<toml::Decoder>(&mut toml::Decoder::new(config)) {
+        Ok(t) => t,
+        Err(err) => panic!(format!("Couldn't deserialise config: {:?}", err))
     }
 }
