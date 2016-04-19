@@ -7,6 +7,8 @@ preferably using `git send-email`. We strongly prefer emailed patches
 over GitHub pull requests - after all, emailed patches are exactly why
 snowpatch exists!
 
+Patch status is tracked on [patchwork.ozlabs.org](https://patchwork.ozlabs.org/project/snowpatch/).
+
 All commit messages must include a `Signed-off-by:` line including
 your real name, indicating that you have read and agree to the
 [Developer Certificate of Origin

@@ -53,6 +53,9 @@ snowpatch development is done on our mailing list,
 subscribe, go to the
 [listinfo page](https://lists.ozlabs.org/listinfo/snowpatch).
 
+Patches are tracked on
+[patchwork.ozlabs.org](https://patchwork.ozlabs.org/project/snowpatch/).
+
 snowpatch is maintained by
 [Russell Currey](mailto:ruscur@russell.cc) and
 [Andrew Donnellan](mailto:andrew.donnellan@au1.ibm.com).
