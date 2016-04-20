@@ -267,6 +267,11 @@ fn main() {
     'daemon: loop {
         let series_list = patchwork.get_series_query().unwrap().results.unwrap();
         for series in series_list {
+            // If it's already been tested, we can skip it
+            if series.test_state.is_some() {
+                continue;
+            }
+
             match settings.projects.get(&series.project.linkname) {
                 None => continue,
                 Some(project) => {
