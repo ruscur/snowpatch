@@ -79,7 +79,7 @@ struct Args {
     flag_project: String,
 }
 
-fn run_tests(settings: &Config, project: &Project, tag: &str) -> Vec<TestResult> {
+fn run_tests(settings: &Config, project: &Project, tag: &str, branch_name: &str) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
     let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
     let project = project.clone();
@@ -112,7 +112,7 @@ fn run_tests(settings: &Config, project: &Project, tag: &str) -> Vec<TestResult>
         jenkins.wait_build(&build_url_real);
         println!("Job done!");
         results.push(TestResult {
-            test_name: job_name.to_string(),
+            test_name: format!("{}/{}", branch_name.to_string(), job_name.to_string()),
             state: TestState::SUCCESS.string(), // TODO: get this from Jenkins
             url: None, // TODO: link to Jenkins job log
             summary: Some("TODO: get this summary from Jenkins".to_string()),
@@ -201,7 +201,7 @@ fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResu
 
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
-            return run_tests(&settings_clone, &project, &tag);
+            return run_tests(&settings_clone, &project, &tag, &branch_name);
         }).unwrap();
         results.append(&mut test.join().unwrap());
 
