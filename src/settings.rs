@@ -15,7 +15,7 @@
 //
 
 use toml;
-use toml::{Parser, Value, Decoder};
+use toml::{Parser, Value};
 
 use git2::{Repository, Error};
 
