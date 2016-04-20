@@ -249,8 +249,8 @@ fn main() {
 
     if args.flag_series > 0 {
         let series = patchwork.get_series(&(args.flag_series as u64)).unwrap();
-        match settings.projects.get(&series.project.name) {
-            None => panic!("Couldn't find project {}", &series.project.name),
+        match settings.projects.get(&series.project.linkname) {
+            None => panic!("Couldn't find project {}", &series.project.linkname),
             Some(project) => {
                 let patch = patchwork.get_patch(&series);
                 test_patch(&settings, &project, &patch);
@@ -267,7 +267,7 @@ fn main() {
     'daemon: loop {
         let series_list = patchwork.get_series_query().unwrap().results.unwrap();
         for series in series_list {
-            match settings.projects.get(&series.project.name) {
+            match settings.projects.get(&series.project.linkname) {
                 None => continue,
                 Some(project) => {
                     let patch = patchwork.get_patch(&series);
