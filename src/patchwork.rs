@@ -16,7 +16,6 @@
 
 use std;
 use std::io::{self};
-use std::str;
 use std::option::Option;
 use std::path::PathBuf;
 use std::fs::File;
@@ -141,6 +140,14 @@ impl PatchworkServer {
         }));
     }
 
+    fn get(&self, url: &str) -> std::result::Result<String, hyper::error::Error> {
+        let mut resp = try!(self.client.get(&*url).headers(self.headers.clone())
+                            .header(Connection::close()).send());
+        let mut body: Vec<u8> = vec![];
+        io::copy(&mut resp, &mut body).unwrap();
+        Ok(String::from_utf8(body).unwrap())
+    }
+
     pub fn post_test_result(&self, result: TestResult,
                             series_id: &u64, series_revision: &u64)
                             -> Result<StatusCode, hyper::error::Error> {
@@ -158,12 +165,7 @@ impl PatchworkServer {
     pub fn get_series(&self, series_id: &u64) -> Result<Series, DecoderError> {
         let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
                           series_id, PATCHWORK_QUERY);
-        let mut resp = self.client.get(&*url).headers(self.headers.clone())
-            .header(Connection::close()).send().unwrap();
-        let mut body: Vec<u8> = vec![];
-        io::copy(&mut resp, &mut body).unwrap();
-        let body_str = str::from_utf8(&body).unwrap();
-        json::decode(body_str)
+        json::decode(&self.get(&url).unwrap())
     }
 
     pub fn get_series_mbox(&self, series_id: &u64, series_revision: &u64)
@@ -177,15 +179,7 @@ impl PatchworkServer {
     pub fn get_series_query(&self) -> Result<SeriesList, DecoderError> {
         let url = format!("{}{}/series/{}", &self.url,
                           PATCHWORK_API, PATCHWORK_QUERY);
-        let mut resp = self.client.get(&*url).headers(self.headers.clone())
-            .header(Connection::close()).send().unwrap();
-        // Copy the body into our buffer
-        let mut body: Vec<u8> = vec![];
-        io::copy(&mut resp, &mut body).unwrap();
-        // Convert the body into a string so we can decode it
-        let body_str = str::from_utf8(&body).unwrap();
-        // Decode the json string into our SeriesList struct
-        json::decode(body_str)
+        json::decode(&self.get(&url).unwrap())
     }
 
     pub fn get_patch(&self, series: &Series) -> PathBuf {
