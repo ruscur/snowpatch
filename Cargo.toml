@@ -26,7 +26,7 @@ license = "GPL-2.0+"
 name = "snowpatch"
 
 [dependencies]
-hyper = "0.8"
+hyper = "0.9"
 git2 = "0.3"
 rustc-serialize = "0.3"
 url = "0.5"
