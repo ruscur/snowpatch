@@ -55,7 +55,9 @@ impl<'a> CIBackend for JenkinsBackend<'a> {
     fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>)
                   -> Result<String, &'static str> {
         let client = Client::new(); // TODO: do we want to get this from somewhere else?
-        let params = url::form_urlencoded::serialize(params);
+        let params = url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(params)
+            .finish();
 
         let res = client.post(&format!("{}/job/{}/buildWithParameters?{}", self.base_url, job_name, params)).send().expect("HTTP request error"); // TODO don't panic here
 
