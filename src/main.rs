@@ -25,6 +25,7 @@ extern crate git2;
 extern crate toml;
 extern crate tempdir;
 extern crate docopt;
+extern crate url;
 
 use git2::{Cred, BranchType, RemoteCallbacks, PushOptions};
 
@@ -32,12 +33,15 @@ use hyper::Client;
 
 use docopt::Docopt;
 
+use url::Url;
+
 use std::fs;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use std::path::Path;
+use std::env;
 
 mod patchwork;
 use patchwork::{PatchworkServer, TestState, TestResult};
@@ -226,7 +230,21 @@ fn main() {
     let settings = settings::parse(args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
-    let client = Arc::new(Client::new());
+    // TODO: HTTPS support, not yet implemented in Hyper as of 0.9.6
+    let client = Arc::new(match env::var("http_proxy") {
+        Ok(proxy_url) => {
+            let proxy = Url::parse(&proxy_url).unwrap_or_else(|e| {
+                panic!("http_proxy is malformed: {:?}, error: {}", proxy_url, e);
+            });
+            assert!(proxy.has_host());
+            assert!(proxy.scheme() == "http");
+            // This should pass even if no trailing slash is in http_proxy
+            assert!(proxy.path() == "/");
+            Client::with_http_proxy(proxy.host_str().unwrap().to_string(),
+                proxy.port().unwrap_or(80))
+        },
+        _ => Client::new()
+    });
 
     let mut patchwork = PatchworkServer::new(&settings.patchwork.url, &client);
     if settings.patchwork.user.is_some() {
