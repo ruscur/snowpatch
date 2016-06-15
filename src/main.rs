@@ -131,10 +131,11 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         }
         debug!("Build URL: {}", build_url_real);
         jenkins.wait_build(&build_url_real);
+        let test_result = jenkins.get_build_result(&build_url_real).unwrap();
         info!("Jenkins job for {}/{} complete.", branch_name, job_name);
         results.push(TestResult {
             test_name: format!("{}/{}", branch_name.to_string(), job_name.to_string()),
-            state: TestState::success,
+            state: test_result,
             url: None, // TODO: link to Jenkins job log
             summary: Some("TODO: get this summary from Jenkins".to_string()),
         });

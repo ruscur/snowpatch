@@ -34,6 +34,8 @@ use hyper::client::{IntoUrl, RequestBuilder};
 use hyper::header::{Headers, Basic, Authorization, Location};
 use rustc_serialize::json::Json;
 
+use patchwork::TestState;
+
 // Constants
 const JENKINS_POLLING_INTERVAL: u64 = 5000; // Polling interval in milliseconds
 
@@ -136,6 +138,19 @@ impl JenkinsBackend {
             JenkinsBuildStatus::Running
         } else {
             JenkinsBuildStatus::Done
+        }
+    }
+
+    pub fn get_build_result(&self, build_url: &str) -> Option<TestState> {
+        match self.get_api_json_object(build_url).get("result").unwrap()
+            .as_string() {
+            None => None,
+            Some(result) => match result { // TODO: Improve this...
+                "SUCCESS" => Some(TestState::success),
+                "FAILURE" => Some(TestState::failure),
+                "UNSTABLE" => Some(TestState::warning),
+                _ => Some(TestState::pending),
+            },
         }
     }
 
