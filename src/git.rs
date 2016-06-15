@@ -47,7 +47,7 @@ pub fn pull(repo: &Repository) -> Result<Output, &'static str> {
         .unwrap(); // TODO
 
     if output.status.success() {
-        println!("Pull: {}", String::from_utf8(output.clone().stdout).unwrap());
+        debug!("Pull: {}", String::from_utf8(output.clone().stdout).unwrap());
         return Ok(output);
     } else {
         return Err("Error: couldn't pull changes");
@@ -75,7 +75,7 @@ pub fn apply_patch(repo: &Repository, path: &Path)
         .unwrap(); // TODO
 
     if output.status.success() {
-        println!("Patch applied with text {}",
+        debug!("Patch applied with text {}",
                  String::from_utf8(output.clone().stdout).unwrap());
         return Ok(output);
     } else {

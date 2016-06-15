@@ -86,7 +86,7 @@ pub fn parse(path: String) -> Config {
         for err in &parser.errors {
             let (loline, locol) = parser.to_linecol(err.lo);
             let (hiline, hicol) = parser.to_linecol(err.hi);
-            println!("TOML parsing error: {} in {} at {}:{}-{}:{}",
+            error!("TOML parsing error: {} in {} at {}:{}-{}:{}",
                     err.desc, path, loline, locol, hiline, hicol);
         }
         panic!("Syntax error in TOML file, exiting.");

@@ -153,7 +153,7 @@ impl PatchworkServer {
                             -> Result<StatusCode, hyper::error::Error> {
         let encoded = json::encode(&result).unwrap();
         let headers = self.headers.clone();
-        println!("JSON Encoded: {}", encoded);
+        debug!("JSON Encoded: {}", encoded);
         let res = try!(self.client.post(&format!(
             "{}{}/series/{}/revisions/{}/test-results/",
             &self.url, PATCHWORK_API, &series_id, &series_revision))
@@ -179,7 +179,8 @@ impl PatchworkServer {
     pub fn get_series_query(&self) -> Result<SeriesList, DecoderError> {
         let url = format!("{}{}/series/{}", &self.url,
                           PATCHWORK_API, PATCHWORK_QUERY);
-        json::decode(&self.get(&url).unwrap())
+        json::decode(&self.get(&url).unwrap_or_else(
+            |err| panic!("Failed to connect to Patchwork: {}", err)))
     }
 
     pub fn get_patch(&self, series: &Series) -> PathBuf {
@@ -193,7 +194,7 @@ impl PatchworkServer {
         let mut mbox_resp = self.get_series_mbox(&series.id, &series.version)
             .unwrap();
 
-        println!("Saving patch to file {}", path.display());
+        debug!("Saving patch to file {}", path.display());
         let mut mbox = File::create(&path).unwrap_or_else(
             |err| panic!("Couldn't create mbox file: {}", err));
         io::copy(&mut mbox_resp, &mut mbox).unwrap_or_else(

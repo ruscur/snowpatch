@@ -26,6 +26,9 @@ extern crate toml;
 extern crate tempdir;
 extern crate docopt;
 extern crate url;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 use git2::{Cred, BranchType, RemoteCallbacks, PushOptions};
 
@@ -34,6 +37,9 @@ use hyper::Client;
 use docopt::Docopt;
 
 use url::Url;
+
+use log::LogLevelFilter;
+use env_logger::LogBuilder;
 
 use std::fs;
 use std::string::String;
@@ -91,7 +97,7 @@ fn run_tests(settings: &Config, project: &Project, tag: &str, branch_name: &str)
         let job_name = job_params.get("job").unwrap();
         let mut jenkins_params = Vec::<(&str, &str)>::new();
         for (param_name, param_value) in job_params.iter() {
-            println!("Param name {}, value {}", &param_name, &param_value);
+            debug!("Param name {}, value {}", &param_name, &param_value);
             match param_name.as_ref() {
                 // TODO: Validate special parameter names in config at start of program
                 "job" => { },
@@ -100,10 +106,10 @@ fn run_tests(settings: &Config, project: &Project, tag: &str, branch_name: &str)
                 _ => jenkins_params.push((&param_name, &param_value)),
             }
         }
-        println!("Starting job: {}", &job_name);
+        info!("Starting job: {}", &job_name);
         let res = jenkins.start_test(&job_name, jenkins_params)
             .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
-        println!("{:?}", &res);
+        debug!("{:?}", &res);
         let build_url_real;
         loop {
             let build_url = jenkins.get_build_url(&res);
@@ -112,9 +118,9 @@ fn run_tests(settings: &Config, project: &Project, tag: &str, branch_name: &str)
                 None => { },
             }
         }
-        println!("Build URL: {}", build_url_real);
+        debug!("Build URL: {}", build_url_real);
         jenkins.wait_build(&build_url_real);
-        println!("Job done!");
+        info!("Jenkins job for {}/{} complete.", branch_name, job_name);
         results.push(TestResult {
             test_name: format!("{}/{}", branch_name.to_string(), job_name.to_string()),
             state: TestState::SUCCESS.string(), // TODO: get this from Jenkins
@@ -147,20 +153,21 @@ fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResu
     let mut successfully_applied = false;
     for branch_name in project.branches.clone() {
         let tag = format!("{}_{}", tag, branch_name);
-        println!("Switching to base branch {}...", branch_name);
+        info!("Configuring local branch for {}.", tag);
+        debug!("Switching to base branch {}...", branch_name);
         git::checkout_branch(&repo, &branch_name);
 
         // Make sure we're up to date
         git::pull(&repo).unwrap();
 
-        println!("Creating a new branch...");
+        debug!("Creating a new branch...");
         let mut branch = repo.branch(&tag, &commit, true).unwrap();
-        println!("Switching to branch...");
+        debug!("Switching to branch...");
         repo.set_head(branch.get().name().unwrap())
             .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
         repo.checkout_head(None)
             .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
-        println!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
+        debug!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
 
         let output = git::apply_patch(&repo, &path);
 
@@ -174,7 +181,7 @@ fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResu
         // we need to find the branch again since its head has moved
         branch = repo.find_branch(&tag, BranchType::Local).unwrap();
         branch.delete().unwrap();
-        println!("Repo is back to {}", repo.head().unwrap().name().unwrap());
+        debug!("Repo is back to {}", repo.head().unwrap().name().unwrap());
 
         match output {
             Ok(_) => {
@@ -224,15 +231,25 @@ fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResu
 }
 
 fn main() {
+    let mut log_builder = LogBuilder::new();
+    // By default, log at the "info" level for every module
+    log_builder.filter(None, LogLevelFilter::Info);
+    if env::var("RUST_LOG").is_ok() {
+        log_builder.parse(&env::var("RUST_LOG").unwrap());
+    }
+    log_builder.init().unwrap();
+
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
+
     let settings = settings::parse(args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
     // TODO: HTTPS support, not yet implemented in Hyper as of 0.9.6
     let client = Arc::new(match env::var("http_proxy") {
         Ok(proxy_url) => {
+            debug!("snowpatch is using HTTP proxy {}", proxy_url);
             let proxy = Url::parse(&proxy_url).unwrap_or_else(|e| {
                 panic!("http_proxy is malformed: {:?}, error: {}", proxy_url, e);
             });
@@ -243,17 +260,23 @@ fn main() {
             Client::with_http_proxy(proxy.host_str().unwrap().to_string(),
                 proxy.port().unwrap_or(80))
         },
-        _ => Client::new()
+        _ => {
+            debug!("snowpatch starting without a HTTP proxy");
+            Client::new()
+        }
     });
 
     let mut patchwork = PatchworkServer::new(&settings.patchwork.url, &client);
     if settings.patchwork.user.is_some() {
+        debug!("Patchwork authentication set for user {}",
+               &settings.patchwork.user.clone().unwrap());
         patchwork.set_authentication(&settings.patchwork.user.clone().unwrap(),
                                      &settings.patchwork.pass.clone());
     }
     let patchwork = patchwork;
 
     if args.flag_mbox != "" && args.flag_project != "" {
+        info!("snowpatch is testing a local patch.");
         let patch = Path::new(&args.flag_mbox);
         match settings.projects.get(&args.flag_project) {
             None => panic!("Couldn't find project {}", args.flag_project),
@@ -266,6 +289,7 @@ fn main() {
     }
 
     if args.flag_series > 0 {
+        info!("snowpatch is testing a series from Patchwork.");
         let series = patchwork.get_series(&(args.flag_series as u64)).unwrap();
         match settings.projects.get(&series.project.linkname) {
             None => panic!("Couldn't find project {}", &series.project.linkname),
@@ -284,20 +308,26 @@ fn main() {
     // Poll patchwork for new series. For each series, get patches, apply and test.
     'daemon: loop {
         let series_list = patchwork.get_series_query().unwrap().results.unwrap();
+        info!("snowpatch is ready to test new revisions from Patchwork.");
         for series in series_list {
             // If it's already been tested, we can skip it
             if series.test_state.is_some() {
+                debug!("Skipping already tested series {} ({})", series.name, series.id);
                 continue;
             }
 
             match settings.projects.get(&series.project.linkname) {
-                None => continue,
+                None => {
+                    debug!("Project {} not configured for series {} ({})",
+                           &series.project.linkname, series.name, series.id);
+                    continue;
+                },
                 Some(project) => {
                     let patch = patchwork.get_patch(&series);
                     let results = test_patch(&settings, &project, &patch);
                     // Delete the temporary directory with the patch in it
                     fs::remove_dir_all(patch.parent().unwrap()).unwrap_or_else(
-                        |err| println!("Couldn't delete temp directory: {}", err));
+                        |err| error!("Couldn't delete temp directory: {}", err));
                     if project.push_results {
                         for result in results {
                             patchwork.post_test_result(result, &series.id,
@@ -306,6 +336,8 @@ fn main() {
                     }
                     if args.flag_count > 0 {
                         series_count += 1;
+                        debug!("Tested {} series out of {}",
+                               series_count, args.flag_count);
                         if series_count >= args.flag_count {
                             break 'daemon;
                         }
@@ -313,6 +345,7 @@ fn main() {
                 }
             }
         }
+        info!("Finished testing new revisions, sleeping.");
         thread::sleep(Duration::new(settings.patchwork.polling_interval, 0));
     }
 }
