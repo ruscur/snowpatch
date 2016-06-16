@@ -89,9 +89,13 @@ struct Args {
     flag_project: String,
 }
 
-fn run_tests(settings: &Config, project: &Project, tag: &str, branch_name: &str) -> Vec<TestResult> {
+fn run_tests(settings: &Config, client: &Client, project: &Project, tag: &str,
+             branch_name: &str) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
-    let jenkins = JenkinsBackend { base_url: &settings.jenkins.url };
+    let jenkins = JenkinsBackend {
+        base_url: &settings.jenkins.url,
+        hyper_client: &client,
+    };
     let project = project.clone();
     for job_params in project.jobs.iter() {
         let job_name = job_params.get("job").unwrap();
@@ -131,7 +135,7 @@ fn run_tests(settings: &Config, project: &Project, tag: &str, branch_name: &str)
     results
 }
 
-fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResult> {
+fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: &Path) -> Vec<TestResult> {
     let repo = project.get_repo().unwrap();
     let mut results: Vec<TestResult> = Vec::new();
     if !path.is_file() {
@@ -207,12 +211,14 @@ fn test_patch(settings: &Config, project: &Project, path: &Path) -> Vec<TestResu
 
         let settings = settings.clone();
         let project = project.clone();
+        let client = client.clone();
         let settings_clone = settings.clone();
         let test_all_branches = project.test_all_branches.unwrap_or(true);
 
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
-            return run_tests(&settings_clone, &project, &tag, &branch_name);
+            return run_tests(&settings_clone, &client, &project, &tag,
+                             &branch_name);
         }).unwrap();
         results.append(&mut test.join().unwrap());
 
@@ -281,7 +287,7 @@ fn main() {
         match settings.projects.get(&args.flag_project) {
             None => panic!("Couldn't find project {}", args.flag_project),
             Some(project) => {
-                test_patch(&settings, &project, &patch);
+                test_patch(&settings, &client, &project, &patch);
             }
         }
 
@@ -295,7 +301,7 @@ fn main() {
             None => panic!("Couldn't find project {}", &series.project.linkname),
             Some(project) => {
                 let patch = patchwork.get_patch(&series);
-                test_patch(&settings, &project, &patch);
+                test_patch(&settings, &client, &project, &patch);
             }
         }
 
@@ -324,7 +330,7 @@ fn main() {
                 },
                 Some(project) => {
                     let patch = patchwork.get_patch(&series);
-                    let results = test_patch(&settings, &project, &patch);
+                    let results = test_patch(&settings, &client, &project, &patch);
                     // Delete the temporary directory with the patch in it
                     fs::remove_dir_all(patch.parent().unwrap()).unwrap_or_else(
                         |err| error!("Couldn't delete temp directory: {}", err));
