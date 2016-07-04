@@ -1,4 +1,5 @@
-== Logging ==
+Logging
+-------
 
 snowpatch uses [env_logger](https://rust-lang-nursery.github.io/log/env_logger/index.html) to print information for the user.  By default, snowpatch will log everything at the "info" level, which is suitable for general use by non-snowpatch developers.  However, users may want to see less from snowpatch, and only have output when something has gone wrong.  On the other hand, users may want more information about why snowpatch is malfunctioning, or may desire more input while developing snowpatch itself.
 
