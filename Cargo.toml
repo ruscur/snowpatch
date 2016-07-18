@@ -19,9 +19,14 @@ name = "snowpatch"
 version = "0.1.0"
 authors = ["Russell Currey <ruscur@russell.cc>",
 	   "Andrew Donnellan <andrew.donnellan@au1.ibm.com>"]
+homepage = "https://github.com/ruscur/snowpatch"
+repository = "https://github.com/ruscur/snowpatch.git"
+documentation = "https://github.com/ruscur/snowpatch/tree/master/docs"
 description = "continuous integration for patch-based workflows"
 readme = "README.md"
 license = "GPL-2.0+"
+keywords = ["CI", "continuous integration", "patch", "patchwork", "jenkins",
+	    "git"]
 
 [[bin]]
 name = "snowpatch"
