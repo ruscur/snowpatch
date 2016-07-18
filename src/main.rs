@@ -245,8 +245,11 @@ fn main() {
     }
     log_builder.init().unwrap();
 
+    let version = format!("{} version {}",
+        env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
+        .and_then(|d| d.version(Some(version)).decode())
         .unwrap_or_else(|e| e.exit());
 
     let settings = settings::parse(args.arg_config_file);
