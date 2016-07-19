@@ -64,8 +64,8 @@ mod utils;
 
 static USAGE: &'static str = "
 Usage:
-  snowpatch <config-file> [--count=<count> | --series <id>]
-  snowpatch <config-file> --mbox=<mbox> --project=<name>
+  snowpatch <config-file> [--count=<count> | --series <id>] [--project <name>]
+  snowpatch <config-file> --mbox <mbox> --project <name>
   snowpatch -v | --version
   snowpatch -h | --help
 
@@ -74,8 +74,8 @@ By default, snowpatch runs as a long-running daemon.
 Options:
   --count <count>           Run tests on <count> recent series.
   --series <id>             Run tests on the given Patchwork series.
-  --mbox <mbox>             Run tests on the given mbox file...
-  --project <name>          ...as if it were sent to project <name>.
+  --mbox <mbox>             Run tests on the given mbox file. Requires --project
+  --project <name>          Test patches for the given project.
   -v, --version             Output version information.
   -h, --help                Output this help text.
 ";
@@ -322,6 +322,13 @@ fn main() {
             // If it's already been tested, we can skip it
             if series.test_state.is_some() {
                 debug!("Skipping already tested series {} ({})", series.name, series.id);
+                continue;
+            }
+
+            // Skip if we're using -p and it's the wrong project
+            if args.flag_project != "" && series.project.linkname != args.flag_project {
+                debug!("Skipping series {} ({}) (wrong project: {})",
+                       series.name, series.id, series.project.linkname);
                 continue;
             }
 
