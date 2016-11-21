@@ -70,7 +70,7 @@ pub struct Patch {
     pub pull_url: Option<String>,
     pub state: String, // TODO enum of possible states
     pub archived: bool,
-    pub hash: String,
+    pub hash: Option<String>,
     pub submitter: String,
     pub delegate: Option<String>,
     pub mbox: String,
