@@ -24,7 +24,8 @@ polling_interval = 10 # polling interval in minutes
 [jenkins]
 url = "https://jenkins.ozlabs.ibm.com"
 port = 443
-# TODO: jenkins auth (our testing jenkins has no auth)
+username = patchwork
+token = 33333333333333333333333333333333
 
 [projects]
 

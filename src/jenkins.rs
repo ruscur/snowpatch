@@ -30,7 +30,8 @@ use std::thread::sleep;
 use std::sync::Arc;
 
 use hyper::Client;
-use hyper::header::Location;
+use hyper::client::{IntoUrl, RequestBuilder};
+use hyper::header::{Headers, Basic, Authorization, Location};
 use rustc_serialize::json::Json;
 
 // Constants
@@ -45,7 +46,8 @@ pub trait CIBackend { // TODO: Separate out
 pub struct JenkinsBackend {
     pub base_url: String,
     pub hyper_client: Arc<Client>,
-    // TODO: Authentication
+    pub username: Option<String>,
+    pub token: Option<String>,
 }
 
 impl CIBackend for JenkinsBackend {
@@ -60,9 +62,8 @@ impl CIBackend for JenkinsBackend {
             .extend_pairs(params)
             .finish();
 
-        let res = self.hyper_client
-            .post(&format!("{}/job/{}/buildWithParameters?{}",
-                           self.base_url, job_name, params))
+        let res = self.post(&format!("{}/job/{}/buildWithParameters?{}",
+                                     self.base_url, job_name, params))
             .send().expect("HTTP request error"); // TODO don't panic here
 
         match res.headers.get::<Location>() {
@@ -78,10 +79,33 @@ pub enum JenkinsBuildStatus {
 }
 
 impl JenkinsBackend {
+    fn headers(&self) -> Headers {
+        let mut headers = Headers::new();
+        if let Some(ref username) = self.username {
+            headers.set(
+                Authorization(
+                    Basic {
+                        username: username.clone(),
+                        password: self.token.clone(),
+                    }
+                )
+            );
+        }
+        headers
+    }
+
+    fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.hyper_client.get(url).headers(self.headers())
+    }
+
+    fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.hyper_client.post(url).headers(self.headers())
+    }
+
     fn get_api_json_object(&self, base_url: &str) -> rustc_serialize::json::Object {
         // TODO: Don't panic on failure, fail more gracefully
         let url = format!("{}api/json", base_url);
-        let mut resp = self.hyper_client.get(&url).send().expect("HTTP request error");
+        let mut resp = self.get(&url).send().expect("HTTP request error");
         let mut result_str = String::new();
         resp.read_to_string(&mut result_str)
             .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));

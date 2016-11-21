@@ -41,6 +41,8 @@ pub struct Patchwork {
 pub struct Jenkins {
     pub url: String,
     pub port: Option<u16>,
+    // TODO: fail if we only get one of username or token
+    pub username: Option<String>,
     pub token: Option<String>
 }
 

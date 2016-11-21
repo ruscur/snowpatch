@@ -95,6 +95,8 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
     let jenkins = JenkinsBackend {
         base_url: settings.jenkins.url.clone(),
         hyper_client: client,
+        username: settings.jenkins.username.clone(),
+        token: settings.jenkins.token.clone(),
     };
     let project = project.clone();
     for job_params in project.jobs.iter() {
