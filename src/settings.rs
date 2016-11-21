@@ -68,6 +68,10 @@ pub struct Config {
     pub projects: BTreeMap<String, Project>
 }
 
+pub fn job_is_hefty(job: &BTreeMap<String, String>) -> bool {
+    job.get("hefty").unwrap_or(&"false".to_string()).parse::<bool>().unwrap()
+}
+
 pub fn parse(path: String) -> Config {
     let mut toml_config = String::new();
 
