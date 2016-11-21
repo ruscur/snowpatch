@@ -365,7 +365,8 @@ fn main() {
      * Spawn tests.
      */
     'daemon: loop {
-        let patch_list = patchwork.get_patch_query().unwrap();
+        let patch_list = patchwork.get_patch_query().unwrap_or_else(
+            |err| panic!("Failed to obtain patch list: {}", err));
         info!("snowpatch is ready to test new revisions from Patchwork.");
         for patch in patch_list {
             // If it's already been tested, we can skip it
