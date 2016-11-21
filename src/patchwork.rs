@@ -109,7 +109,7 @@ pub enum TestState {
     PENDING,
     SUCCESS,
     WARNING,
-    FAILURE
+    FAIL,
 }
 
 impl TestState {
@@ -118,7 +118,7 @@ impl TestState {
             TestState::PENDING => "pending".to_string(),
             TestState::SUCCESS => "success".to_string(),
             TestState::WARNING => "warning".to_string(),
-            TestState::FAILURE => "fail".to_string(),
+            TestState::FAIL    => "fail".to_string(),
         }
     }
 }

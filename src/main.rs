@@ -241,7 +241,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
 
     if !successfully_applied {
         results.push(TestResult {
-            state: TestState::FAILURE.string(),
+            state: TestState::FAIL.string(),
             description: Some("Failed to apply to any branch".to_string()),
             .. Default::default()
         });
