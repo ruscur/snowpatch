@@ -124,25 +124,27 @@ impl TestState {
 }
 
 // /api/1.0/series/*/revisions/*/test-results/
-#[derive(RustcEncodable)]
+#[derive(RustcEncodable, Default, Clone)]
 pub struct TestResult {
     pub state: String,
-    pub target_url: String,
+    pub target_url: Option<String>,
     pub description: Option<String>,
-    pub context: String
+    pub context: Option<String>,
 }
 
 impl TestResult {
-    pub fn new(state: TestState, url: Option<String>, desc: Option<String>)
-               -> TestResult {
-        TestResult {
-            state: state.string(),
-            target_url: url.unwrap_or("http://no.url/".to_string()),
-            description: desc,
-            // context has to be a slug, no dots!
-            context: format!("{}-{}", env!("CARGO_PKG_NAME"),
-                             env!("CARGO_PKG_VERSION")).to_string().replace(".", "_")
+    pub fn as_json(&self) -> String {
+        let mut result = self.clone();
+        if result.target_url.is_none() {
+            result.target_url = Some("http://no.url".to_string());
         }
+        if result.context.is_none() {
+            result.context = Some(format!("{}-{}",
+                                     env!("CARGO_PKG_NAME"),
+                                     env!("CARGO_PKG_VERSION")).to_string()
+                .replace(".", "_"));
+        }
+        json::encode(&result).unwrap()
     }
 }
 
@@ -193,7 +195,7 @@ impl PatchworkServer {
 
     pub fn post_test_result(&self, result: TestResult, checks_url: &String)
                             -> Result<StatusCode, hyper::error::Error> {
-        let encoded = json::encode(&result).unwrap();
+        let encoded = result.as_json();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
         let mut resp = try!(self.client.post(checks_url)

@@ -132,9 +132,12 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         jenkins.wait_build(&build_url_real);
         info!("Jenkins job for {}/{} complete.", branch_name, job_name);
         // TODO: actually get results from jenkins
-        results.push(TestResult::new(TestState::SUCCESS, None,
-                                     Some(format!("{}/{}", branch_name.to_string(),
-                                             job_name.to_string()).to_string())));
+        results.push(TestResult {
+            state: TestState::SUCCESS.string(),
+            description: Some(format!("{}/{}", branch_name.to_string(),
+                                      job_name.to_string()).to_string()),
+            .. Default::default()
+        });
     }
     results
 }
@@ -195,21 +198,27 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
         match output {
             Ok(_) => {
                 successfully_applied = true;
-                results.push(TestResult::new(TestState::SUCCESS, None,
-                                             Some(format!("{}/{}\n\n{}",
-                                                          branch_name.to_string(),
-                                                          "apply_patch".to_string(),
-                                                          "Successfully applied".to_string())
-                                                  .to_string())));
+                results.push(TestResult {
+                    state: TestState::SUCCESS.string(),
+                    description: Some(format!("{}/{}\n\n{}",
+                                              branch_name.to_string(),
+                                              "apply_patch".to_string(),
+                                              "Successfully applied".to_string())
+                                      .to_string()),
+                    .. Default::default()
+                });
             },
             Err(_) => {
                 // It didn't apply.  No need to bother testing.
-                results.push(TestResult::new(TestState::WARNING, None,
-                                             Some(format!("{}/{}\n\n{}",
-                                                          branch_name.to_string(),
-                                                          "apply_patch".to_string(),
-                                                          "Patch failed to apply".to_string())
-                                                  .to_string())));
+                results.push(TestResult {
+                    state: TestState::WARNING.string(),
+                    description: Some(format!("{}/{}\n\n{}",
+                                              branch_name.to_string(),
+                                              "apply_patch".to_string(),
+                                              "Patch failed to apply".to_string())
+                                      .to_string()),
+                    .. Default::default()
+                });
                 continue;
             }
         }
@@ -231,8 +240,11 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
     }
 
     if !successfully_applied {
-        results.push(TestResult::new(TestState::FAILURE, None,
-                                     Some("Failed to apply to any branch".to_string())));
+        results.push(TestResult {
+            state: TestState::FAILURE.string(),
+            description: Some("Failed to apply to any branch".to_string()),
+            .. Default::default()
+        });
     }
     results
 }
