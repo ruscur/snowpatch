@@ -89,12 +89,12 @@ struct Args {
     flag_project: String,
 }
 
-fn run_tests(settings: &Config, client: &Client, project: &Project, tag: &str,
+fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &str,
              branch_name: &str) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
     let jenkins = JenkinsBackend {
-        base_url: &settings.jenkins.url,
-        hyper_client: &client,
+        base_url: settings.jenkins.url.clone(),
+        hyper_client: client,
     };
     let project = project.clone();
     for job_params in project.jobs.iter() {
@@ -217,7 +217,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
 
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
-            return run_tests(&settings_clone, &client, &project, &tag,
+            return run_tests(&settings_clone, client, &project, &tag,
                              &branch_name);
         }).unwrap();
         results.append(&mut test.join().unwrap());

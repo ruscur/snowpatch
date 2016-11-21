@@ -27,6 +27,7 @@ extern crate rustc_serialize;
 use std::io::Read;
 use std::time::Duration;
 use std::thread::sleep;
+use std::sync::Arc;
 
 use hyper::Client;
 use hyper::header::Location;
@@ -41,13 +42,13 @@ pub trait CIBackend { // TODO: Separate out
     fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>) -> Result<String, &'static str>;
 }
 
-pub struct JenkinsBackend<'a> {
-    pub base_url: &'a str,
-    pub hyper_client: &'a Client,
+pub struct JenkinsBackend {
+    pub base_url: String,
+    pub hyper_client: Arc<Client>,
     // TODO: Authentication
 }
 
-impl<'a> CIBackend for JenkinsBackend<'a> {
+impl CIBackend for JenkinsBackend {
     /// Start a Jenkins build
     ///
     /// # Failures
@@ -76,7 +77,7 @@ pub enum JenkinsBuildStatus {
     Done,
 }
 
-impl<'a> JenkinsBackend<'a> {
+impl JenkinsBackend {
     fn get_api_json_object(&self, base_url: &str) -> rustc_serialize::json::Object {
         // TODO: Don't panic on failure, fail more gracefully
         let url = format!("{}api/json", base_url);
