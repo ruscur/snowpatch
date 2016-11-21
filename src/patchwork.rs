@@ -81,22 +81,18 @@ pub struct SeriesList {
 }
 
 // TODO: remove this when we have Jenkins result handling
-#[allow(dead_code)]
+#[allow(warnings)] // for not being camelcase because encoding
+#[derive(RustcEncodable, Clone)]
 pub enum TestState {
-    PENDING,
-    SUCCESS,
-    WARNING,
-    FAILURE
+    pending,
+    success,
+    warning,
+    failure,
 }
 
-impl TestState {
-    pub fn string(&self) -> String {
-        match *self {
-            TestState::PENDING => "pending".to_string(),
-            TestState::SUCCESS => "success".to_string(),
-            TestState::WARNING => "warning".to_string(),
-            TestState::FAILURE => "failure".to_string(),
-        }
+impl Default for TestState {
+    fn default() -> TestState {
+        TestState::pending
     }
 }
 
@@ -104,7 +100,7 @@ impl TestState {
 #[derive(RustcEncodable)]
 pub struct TestResult {
     pub test_name: String,
-    pub state: String,
+    pub state: TestState,
     pub url: Option<String>,
     pub summary: Option<String>
 }

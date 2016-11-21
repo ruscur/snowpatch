@@ -134,7 +134,7 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         info!("Jenkins job for {}/{} complete.", branch_name, job_name);
         results.push(TestResult {
             test_name: format!("{}/{}", branch_name.to_string(), job_name.to_string()),
-            state: TestState::SUCCESS.string(), // TODO: get this from Jenkins
+            state: TestState::success,
             url: None, // TODO: link to Jenkins job log
             summary: Some("TODO: get this summary from Jenkins".to_string()),
         });
@@ -197,7 +197,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
                 successfully_applied = true;
                 results.push(TestResult {
                     test_name: "apply_patch".to_string(),
-                    state: TestState::SUCCESS.string(),
+                    state: TestState::success,
                     url: None,
                     summary: Some(format!("Successfully applied to branch {}", branch_name)),
                 });
@@ -206,7 +206,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
                 // It didn't apply.  No need to bother testing.
                 results.push(TestResult {
                     test_name: "apply_patch".to_string(),
-                    state: TestState::WARNING.string(),
+                    state: TestState::warning,
                     url: None,
                     summary: Some(format!("Failed to apply to branch {}", branch_name)),
                 });
@@ -232,7 +232,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
     if !successfully_applied {
         results.push(TestResult {
             test_name: "apply_patch".to_string(),
-            state: TestState::FAILURE.string(),
+            state: TestState::failure,
             url: None,
             summary: Some("Failed to apply to any branch".to_string()),
         });
