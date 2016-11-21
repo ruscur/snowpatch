@@ -32,7 +32,7 @@ use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use hyper::status::StatusCode;
 use hyper::client::response::Response;
 
-use rustc_serialize::json::{self, DecoderError};
+use rustc_serialize::json::{self, Json, ToJson, DecoderError};
 
 use utils;
 
@@ -105,6 +105,7 @@ pub struct Series {
 
 // TODO: remove this when we have Jenkins result handling
 #[allow(dead_code)]
+#[derive(RustcEncodable, Clone)]
 pub enum TestState {
     PENDING,
     SUCCESS,
@@ -112,21 +113,29 @@ pub enum TestState {
     FAIL,
 }
 
-impl TestState {
-    pub fn string(&self) -> String {
-        match *self {
-            TestState::PENDING => "pending".to_string(),
-            TestState::SUCCESS => "success".to_string(),
-            TestState::WARNING => "warning".to_string(),
-            TestState::FAIL    => "fail".to_string(),
-        }
+impl ToJson for TestState {
+    fn to_json(&self) -> Json {
+        Json::String(
+            match *self {
+                TestState::PENDING => "pending".to_string(),
+                TestState::SUCCESS => "success".to_string(),
+                TestState::WARNING => "warning".to_string(),
+                TestState::FAIL    => "fail".to_string(),
+            }
+        )
+    }
+}
+
+impl Default for TestState {
+    fn default() -> TestState {
+        TestState::PENDING
     }
 }
 
 // /api/1.0/series/*/revisions/*/test-results/
 #[derive(RustcEncodable, Default, Clone)]
 pub struct TestResult {
-    pub state: String,
+    pub state: TestState,
     pub target_url: Option<String>,
     pub description: Option<String>,
     pub context: Option<String>,

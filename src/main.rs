@@ -133,7 +133,7 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         info!("Jenkins job for {}/{} complete.", branch_name, job_name);
         // TODO: actually get results from jenkins
         results.push(TestResult {
-            state: TestState::SUCCESS.string(),
+            state: TestState::SUCCESS,
             description: Some(format!("{}/{}", branch_name.to_string(),
                                       job_name.to_string()).to_string()),
             .. Default::default()
@@ -199,7 +199,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
             Ok(_) => {
                 successfully_applied = true;
                 results.push(TestResult {
-                    state: TestState::SUCCESS.string(),
+                    state: TestState::SUCCESS,
                     description: Some(format!("{}/{}\n\n{}",
                                               branch_name.to_string(),
                                               "apply_patch".to_string(),
@@ -211,7 +211,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
             Err(_) => {
                 // It didn't apply.  No need to bother testing.
                 results.push(TestResult {
-                    state: TestState::WARNING.string(),
+                    state: TestState::WARNING,
                     description: Some(format!("{}/{}\n\n{}",
                                               branch_name.to_string(),
                                               "apply_patch".to_string(),
@@ -241,7 +241,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
 
     if !successfully_applied {
         results.push(TestResult {
-            state: TestState::FAIL.string(),
+            state: TestState::FAIL,
             description: Some("Failed to apply to any branch".to_string()),
             .. Default::default()
         });
