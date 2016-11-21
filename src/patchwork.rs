@@ -18,8 +18,9 @@ use std;
 use std::io::{self};
 use std::option::Option;
 use std::path::PathBuf;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::result::Result;
+use std::collections::BTreeMap;
 
 use tempdir::TempDir;
 
@@ -37,47 +38,69 @@ use utils;
 
 // TODO: more constants.  constants for format strings of URLs and such.
 pub static PATCHWORK_API: &'static str = "/api/1.0";
-pub static PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
+pub static PATCHWORK_QUERY: &'static str = "?page=last";
 
-// /api/1.0/projects/*/series/
-
+// /api/1.0/projects/{id}
 #[derive(RustcDecodable, Clone)]
 pub struct Project {
     pub id: u64,
+    pub url: String,
     pub name: String,
-    pub linkname: String,
-    pub listemail: String,
+    pub link_name: String,
+    pub list_email: String,
+    pub list_id: String,
     pub web_url: Option<String>,
     pub scm_url: Option<String>,
-    pub webscm_url: Option<String>
+    pub webscm_url: Option<String>,
+    pub maintainers: Vec<String>
 }
+
+// /api/1.0/patches/
+// This omits fields from /patches/{id}, deal with it for now.
 
 #[derive(RustcDecodable, Clone)]
-pub struct Submitter {
+pub struct Patch {
     pub id: u64,
-    pub name: String
+    pub url: String,
+    pub project: String,
+    pub msgid: String,
+    pub date: String,
+    pub name: String,
+    pub commit_ref: Option<String>,
+    pub pull_url: Option<String>,
+    pub state: String, // TODO enum of possible states
+    pub archived: bool,
+    pub hash: String,
+    pub submitter: String,
+    pub delegate: Option<String>,
+    pub mbox: String,
+    pub series: Vec<String>,
+    pub check: String, // TODO enum of possible states
+    pub checks: String,
+    pub tags: BTreeMap<String, u64>
 }
 
+impl Patch {
+    pub fn has_series(&self) -> bool {
+            !&self.series.is_empty()
+    }
+}
+
+// /api/1.0/series/
+// The series list and /series/{id} are the same, luckily
 #[derive(RustcDecodable, Clone)]
 pub struct Series {
     pub id: u64,
-    pub project: Project,
+    pub url: String,
     pub name: String,
-    pub n_patches: u64,
-    pub submitter: Submitter,
-    pub submitted: String,
-    pub last_updated: String,
+    pub date: String,
+    pub submitter: String,
     pub version: u64,
-    pub reviewer: Option<String>,
-    pub test_state: Option<String>
-}
-
-#[derive(RustcDecodable)]
-pub struct SeriesList {
-    pub count: u64,
-    pub next: Option<String>,
-    pub previous: Option<String>,
-    pub results: Option<Vec<Series>>
+    pub total: u64,
+    pub received_total: u64,
+    pub received_all: bool,
+    pub cover_letter: Option<String>,
+    pub patches: Vec<String>
 }
 
 // TODO: remove this when we have Jenkins result handling
@@ -95,7 +118,7 @@ impl TestState {
             TestState::PENDING => "pending".to_string(),
             TestState::SUCCESS => "success".to_string(),
             TestState::WARNING => "warning".to_string(),
-            TestState::FAILURE => "failure".to_string(),
+            TestState::FAILURE => "fail".to_string(),
         }
     }
 }
@@ -103,10 +126,24 @@ impl TestState {
 // /api/1.0/series/*/revisions/*/test-results/
 #[derive(RustcEncodable)]
 pub struct TestResult {
-    pub test_name: String,
     pub state: String,
-    pub url: Option<String>,
-    pub summary: Option<String>
+    pub target_url: String,
+    pub description: Option<String>,
+    pub context: String
+}
+
+impl TestResult {
+    pub fn new(state: TestState, url: Option<String>, desc: Option<String>)
+               -> TestResult {
+        TestResult {
+            state: state.string(),
+            target_url: url.unwrap_or("http://no.url/".to_string()),
+            description: desc,
+            // context has to be a slug, no dots!
+            context: format!("{}-{}", env!("CARGO_PKG_NAME"),
+                             env!("CARGO_PKG_VERSION")).to_string().replace(".", "_")
+        }
+    }
 }
 
 pub struct PatchworkServer {
@@ -139,8 +176,13 @@ impl PatchworkServer {
             password: password.clone(),
         }));
     }
+    pub fn get_url(&self, url: &String)
+                   -> std::result::Result<Response, hyper::error::Error> {
+        self.client.get(&*url).headers(self.headers.clone())
+            .header(Connection::close()).send()
+    }
 
-    fn get(&self, url: &str) -> std::result::Result<String, hyper::error::Error> {
+    pub fn get_url_string(&self, url: &String) -> std::result::Result<String, hyper::error::Error> {
         let mut resp = try!(self.client.get(&*url).headers(self.headers.clone())
                             .header(Connection::close()).send());
         let mut body: Vec<u8> = vec![];
@@ -148,51 +190,61 @@ impl PatchworkServer {
         Ok(String::from_utf8(body).unwrap())
     }
 
-    pub fn post_test_result(&self, result: TestResult,
-                            series_id: &u64, series_revision: &u64)
+
+    pub fn post_test_result(&self, result: TestResult, checks_url: &String)
                             -> Result<StatusCode, hyper::error::Error> {
         let encoded = json::encode(&result).unwrap();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
-        let res = try!(self.client.post(&format!(
-            "{}{}/series/{}/revisions/{}/test-results/",
-            &self.url, PATCHWORK_API, &series_id, &series_revision))
-            .headers(headers).body(&encoded).send());
-        assert_eq!(res.status, hyper::status::StatusCode::Created);
-        Ok(res.status)
+        let mut resp = try!(self.client.post(checks_url)
+                        .headers(headers).body(&encoded).send());
+        let mut body: Vec<u8> = vec![];
+        io::copy(&mut resp, &mut body).unwrap();
+        trace!("{}", String::from_utf8(body).unwrap());
+        assert_eq!(resp.status, hyper::status::StatusCode::Created);
+        Ok(resp.status)
     }
 
-    pub fn get_series(&self, series_id: &u64) -> Result<Series, DecoderError> {
-        let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
-                          series_id, PATCHWORK_QUERY);
-        json::decode(&self.get(&url).unwrap())
+    pub fn get_project(&self, url: &String) -> Result<Project, DecoderError> {
+        json::decode(&self.get_url_string(url).unwrap())
     }
 
-    pub fn get_series_mbox(&self, series_id: &u64, series_revision: &u64)
-                           -> std::result::Result<Response, hyper::error::Error> {
-        let url = format!("{}{}/series/{}/revisions/{}/mbox/",
-                               &self.url, PATCHWORK_API, series_id, series_revision);
-        self.client.get(&*url).headers(self.headers.clone())
-            .header(Connection::close()).send()
+    pub fn get_patch(&self, patch_id: &u64) -> Result<Patch, DecoderError> {
+        let url = format!("{}{}/patches/{}{}", &self.url, PATCHWORK_API,
+                          patch_id, PATCHWORK_QUERY);
+        json::decode(&self.get_url_string(&url).unwrap())
     }
 
-    pub fn get_series_query(&self) -> Result<SeriesList, DecoderError> {
-        let url = format!("{}{}/series/{}", &self.url,
-                          PATCHWORK_API, PATCHWORK_QUERY);
-        json::decode(&self.get(&url).unwrap_or_else(
+    pub fn get_patch_by_url(&self, url: &String) -> Result<Patch, DecoderError> {
+        json::decode(&self.get_url_string(&url).unwrap())
+    }
+
+    pub fn get_patch_query(&self) -> Result<Vec<Patch>, DecoderError> {
+        let url = format!("{}{}/patches/{}", &self.url, PATCHWORK_API, PATCHWORK_QUERY);
+        json::decode(&self.get_url_string(&url).unwrap_or_else(
             |err| panic!("Failed to connect to Patchwork: {}", err)))
     }
 
-    pub fn get_patch(&self, series: &Series) -> PathBuf {
+    pub fn get_patch_dependencies(&self, patch: &Patch) -> Vec<Patch> {
+        // We assume the list of patches in a series are in order.
+        let series = self.get_series_by_url(&patch.series[0]).unwrap();
+        let mut dependencies: Vec<Patch> = vec!();
+        for dependency in series.patches {
+            dependencies.push(self.get_patch_by_url(&dependency).unwrap());
+            if dependency == patch.url {
+                break;
+            }
+        }
+        dependencies
+    }
+
+    pub fn get_patch_mbox(&self, patch: &Patch) -> PathBuf {
         let dir = TempDir::new("snowpatch").unwrap().into_path();
         let mut path = dir.clone();
-        let tag = utils::sanitise_path(
-            format!("{}-{}-{}", series.submitter.name,
-                    series.id, series.version));
+        let tag = utils::sanitise_path(patch.name.clone());
         path.push(format!("{}.mbox", tag));
 
-        let mut mbox_resp = self.get_series_mbox(&series.id, &series.version)
-            .unwrap();
+        let mut mbox_resp = self.get_url(&patch.mbox).unwrap();
 
         debug!("Saving patch to file {}", path.display());
         let mut mbox = File::create(&path).unwrap_or_else(
@@ -201,4 +253,37 @@ impl PatchworkServer {
             |err| panic!("Couldn't save mbox from Patchwork: {}", err));
         path
     }
+
+    pub fn get_patches_mbox(&self, patches: Vec<Patch>) -> PathBuf {
+        let dir = TempDir::new("snowpatch").unwrap().into_path();
+        let mut path = dir.clone();
+        let tag = utils::sanitise_path(patches.last().unwrap().name.clone());
+        path.push(format!("{}.mbox", tag));
+
+        let mut mbox = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&path)
+            .unwrap_or_else(|err| panic!("Couldn't make file: {}", err));
+
+        for patch in patches {
+            let mut mbox_resp = self.get_url(&patch.mbox).unwrap();
+            debug!("Appending patch {} to file {}", patch.name, path.display());
+            io::copy(&mut mbox_resp, &mut mbox).unwrap_or_else(
+            	|err| panic!("Couldn't save mbox from Patchwork: {}", err));
+        }
+        path
+    }
+
+    pub fn get_series(&self, series_id: &u64) -> Result<Series, DecoderError> {
+        let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
+                          series_id, PATCHWORK_QUERY);
+        json::decode(&self.get_url_string(&url).unwrap())
+    }
+
+    pub fn get_series_by_url(&self, url: &String) -> Result<Series, DecoderError> {
+        json::decode(&self.get_url_string(&url).unwrap())
+    }
+
 }
