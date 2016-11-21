@@ -37,6 +37,7 @@ use hyper::Client;
 use hyper::client::ProxyConfig;
 use hyper::net::HttpsConnector;
 use hyper_openssl::OpensslClient;
+use hyper::client::RedirectPolicy;
 
 use docopt::Docopt;
 
@@ -276,11 +277,15 @@ fn main() {
                                                 proxy.host_str().unwrap().to_string(),
                                                 proxy.port().unwrap_or(80),
                                                 connector, ssl);
-            Client::with_proxy_config(proxy_config)
+            let mut c = Client::with_proxy_config(proxy_config);
+            c.set_redirect_policy(RedirectPolicy::FollowAll);
+            c
         },
         _ => {
             debug!("snowpatch starting without a HTTP proxy");
-            Client::new()
+            let mut c = Client::new();
+            c.set_redirect_policy(RedirectPolicy::FollowAll);
+            c
         }
     });
 
