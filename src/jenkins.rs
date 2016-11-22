@@ -114,9 +114,19 @@ impl JenkinsBackend {
     }
 
     pub fn get_build_url(&self, build_queue_entry: &str) -> Option<String> {
-        match self.get_api_json_object(build_queue_entry).get("executable") {
-            Some(exec) => Some(exec.as_object().unwrap().get("url").unwrap().as_string().unwrap().to_string()),
-            None => None
+        loop {
+            let entry = self.get_api_json_object(build_queue_entry);
+            match entry.get("executable") {
+                Some(exec) => return Some(exec
+                                          .as_object() // Option<BTreeMap>
+                                          .unwrap() // BTreeMap
+                                          .get("url") // Option<&str> ?
+                                          .unwrap() // &str ?
+                                          .as_string()
+                                          .unwrap()
+                                          .to_string()),
+                None => sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL)),
+            }
         }
     }
 
