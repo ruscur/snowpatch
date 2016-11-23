@@ -106,18 +106,19 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
     let project = project.clone();
     for job_params in &project.jobs {
         let job_name = job_params.get("job").unwrap();
+        let job_title = settings::get_job_title(job_params);
         let mut jenkins_params = Vec::<(&str, &str)>::new();
         for (param_name, param_value) in job_params.iter() {
             debug!("Param name {}, value {}", &param_name, &param_value);
             match param_name.as_ref() {
                 // TODO: Validate special parameter names in config at start of program
-                "job" => { },
+                "job" | "title" => { },
                 "remote" => jenkins_params.push((param_value, &project.remote_uri)),
                 "branch" => jenkins_params.push((param_value, tag)),
                 _ => jenkins_params.push((param_name, param_value)),
             }
         }
-        info!("Starting job: {}", &job_name);
+        info!("Starting job: {}", &job_title);
         let res = jenkins.start_test(job_name, jenkins_params)
             .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
         debug!("{:?}", &res);
@@ -132,9 +133,10 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         debug!("Build URL: {}", build_url_real);
         jenkins.wait_build(&build_url_real);
         let test_result = jenkins.get_build_result(&build_url_real).unwrap();
-        info!("Jenkins job for {}/{} complete.", branch_name, job_name);
+        info!("Jenkins job for {}/{} complete.", branch_name, job_title);
         results.push(TestResult {
-            test_name: format!("{}/{}", branch_name.to_string(), job_name.to_string()),
+            test_name: format!("Test {} on branch {}", job_title.to_string(),
+                               branch_name.to_string()).to_string(),
             state: test_result,
             url: Some(jenkins.get_results_url(&build_url_real, job_params)),
             summary: Some("TODO: get this summary from Jenkins".to_string()),

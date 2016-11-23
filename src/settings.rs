@@ -79,6 +79,13 @@ pub struct Config {
     pub projects: BTreeMap<String, Project>
 }
 
+pub fn get_job_title(job: &BTreeMap<String, String>) -> String {
+    match job.get("title") {
+        Some(title) => title.to_string(),
+        None => job.get("job").unwrap().to_string()
+    }
+}
+
 pub fn parse(path: String) -> Config {
     let mut toml_config = String::new();
 
