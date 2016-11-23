@@ -30,12 +30,20 @@ it, you will need Rust and its package manager, Cargo.  snowpatch should run
 on any target that Rust compiles on, however it has only been tested on Linux.
 We do not provide pre-built binaries at this stage.
 
-snowpatch also requires the `git` binary to be installed.  We try to use the 
-[git2-rs](https://github.com/alexcrichton/git2-rs) library where possible,
-however some operations require the binary (such as applying patches).
+### Non-Rust dependencies
 
-snowpatch can be compiled with `cargo build --release`, which will make
-`target/release/snowpatch`.
+* [`git`](https://git-scm.com): we try to use the
+  [`git2-rs`](https://github.com/alexcrichton/git2-rs) library where
+  possible, but we still need the binary for a few operations.
+* [CMake](https://cmake.org)
+* [OpenSSL](https://www.openssl.org) headers
+* [OpenSSH](https://www.openssh.com) headers
+
+### Building
+
+snowpatch can be compiled with `cargo build --release`, which will
+download and build the Rust packages we depend on. The executable can
+be found in `target/release/snowpatch`.
 
 
 Contributing
