@@ -31,7 +31,7 @@ extern crate url;
 extern crate log;
 extern crate env_logger;
 
-use git2::{Cred, BranchType, RemoteCallbacks, PushOptions};
+use git2::{BranchType, RemoteCallbacks, PushOptions};
 
 use hyper::Client;
 use hyper::client::ProxyConfig;
@@ -155,7 +155,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
 
     let mut push_callbacks = RemoteCallbacks::new();
     push_callbacks.credentials(|_, _, _| {
-        Cred::ssh_key_from_agent("git")
+        git::cred_from_settings(&settings.git)
     });
 
     let mut push_opts = PushOptions::new();

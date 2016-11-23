@@ -14,6 +14,11 @@
 # openpower.toml - example configuration file
 #
 
+[git]
+user = "git"
+public_key = "/home/ruscur/.ssh/id_rsa.pub"
+private_key = "/home/ruscur/.ssh/id_rsa"
+
 [patchwork]
 url = "https://russell.cc/patchwork"
 port = 443 #optional

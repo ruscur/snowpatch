@@ -28,6 +28,14 @@ use std::collections::BTreeMap;
 // TODO: Give more informative error messages when we fail to parse.
 
 #[derive(RustcDecodable, Clone)]
+pub struct Git {
+    pub user: String,
+    pub public_key: Option<String>,
+    pub private_key: String,
+    pub passphrase: Option<String>
+}
+
+#[derive(RustcDecodable, Clone)]
 pub struct Patchwork {
     pub url: String,
     pub port: Option<u16>,
@@ -65,6 +73,7 @@ impl Project {
 
 #[derive(RustcDecodable, Clone)]
 pub struct Config {
+    pub git: Git,
     pub patchwork: Patchwork,
     pub jenkins: Jenkins,
     pub projects: BTreeMap<String, Project>

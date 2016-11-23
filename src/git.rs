@@ -14,12 +14,14 @@
 // git.rs - snowpatch git functionality
 //
 
-use git2::{Repository, Commit, Remote, Error, PushOptions};
+use git2::{Repository, Commit, Remote, Error, PushOptions, Cred};
 use git2::build::CheckoutBuilder;
 
 use std::result::Result;
 use std::path::Path;
 use std::process::{Command, Output};
+
+use settings::Git;
 
 pub static GIT_REF_BASE: &'static str = "refs/heads";
 
@@ -87,6 +89,17 @@ pub fn apply_patch(repo: &Repository, path: &Path)
             .current_dir(&workdir).output().unwrap();
         Err("Patch did not apply successfully")
     }
+}
+
+pub fn cred_from_settings(settings: &Git) -> Result<Cred, Error> {
+    // We have to convert from Option<String> to Option<&str>
+    let public_key = settings.public_key.as_ref().map(String::as_ref);
+    let passphrase = settings.passphrase.as_ref().map(String::as_ref);
+
+    Cred::ssh_key(&settings.user,
+                  public_key,
+                  Path::new(&settings.private_key),
+                  passphrase)
 }
 
 #[cfg(test)]
