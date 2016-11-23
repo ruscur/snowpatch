@@ -136,7 +136,7 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         results.push(TestResult {
             test_name: format!("{}/{}", branch_name.to_string(), job_name.to_string()),
             state: test_result,
-            url: None, // TODO: link to Jenkins job log
+            url: Some(jenkins.get_results_url(&build_url_real, job_params)),
             summary: Some("TODO: get this summary from Jenkins".to_string()),
         });
     }

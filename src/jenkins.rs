@@ -28,6 +28,7 @@ use std::io::Read;
 use std::time::Duration;
 use std::thread::sleep;
 use std::sync::Arc;
+use std::collections::BTreeMap;
 
 use hyper::Client;
 use hyper::client::{IntoUrl, RequestBuilder};
@@ -151,6 +152,13 @@ impl JenkinsBackend {
                 "UNSTABLE" => Some(TestState::warning),
                 _ => Some(TestState::pending),
             },
+        }
+    }
+
+    pub fn get_results_url(&self, build_url: &str, job: &BTreeMap<String, String>) -> String {
+        match job.get("artifact") {
+            Some(artifact) => format!("{}/artifact/{}", build_url, artifact),
+            None => format!("{}/consoleText/", build_url)
         }
     }
 
