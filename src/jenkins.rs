@@ -73,6 +73,7 @@ impl CIBackend for JenkinsBackend {
     }
 }
 
+#[derive(Eq, PartialEq)]
 pub enum JenkinsBuildStatus {
     Running,
     Done,
@@ -131,20 +132,18 @@ impl JenkinsBackend {
     }
 
     pub fn get_build_status(&self, build_url: &str) -> JenkinsBuildStatus {
-        match self.get_api_json_object(build_url).get("building").unwrap().as_boolean().unwrap() {
-            true => JenkinsBuildStatus::Running,
-            false => JenkinsBuildStatus::Done,
+        if self.get_api_json_object(build_url)["building"].as_boolean().unwrap() {
+            JenkinsBuildStatus::Running
+        } else {
+            JenkinsBuildStatus::Done
         }
     }
 
     pub fn wait_build(&self, build_url: &str) -> JenkinsBuildStatus {
         // TODO: Implement a timeout?
-        loop {
-            match self.get_build_status(&build_url) {
-                JenkinsBuildStatus::Done => return JenkinsBuildStatus::Done,
-                _ => { },
-            }
+        while self.get_build_status(build_url) != JenkinsBuildStatus::Done {
             sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
         }
+        JenkinsBuildStatus::Done
     }
 }

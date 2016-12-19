@@ -26,7 +26,7 @@ pub static GIT_REF_BASE: &'static str = "refs/heads";
 pub fn get_latest_commit(repo: &Repository) -> Commit {
     let head = repo.head().unwrap();
     let oid = head.target().unwrap();
-    return repo.find_commit(oid).unwrap();
+    repo.find_commit(oid).unwrap()
 }
 
 pub fn push_to_remote(remote: &mut Remote, branch: &str,
@@ -48,9 +48,9 @@ pub fn pull(repo: &Repository) -> Result<Output, &'static str> {
 
     if output.status.success() {
         debug!("Pull: {}", String::from_utf8(output.clone().stdout).unwrap());
-        return Ok(output);
+        Ok(output)
     } else {
-        return Err("Error: couldn't pull changes");
+        Err("Error: couldn't pull changes")
     }
 
 }
@@ -77,11 +77,11 @@ pub fn apply_patch(repo: &Repository, path: &Path)
     if output.status.success() {
         debug!("Patch applied with text {}",
                  String::from_utf8(output.clone().stdout).unwrap());
-        return Ok(output);
+        Ok(output)
     } else {
         Command::new("git").arg("am").arg("--abort")
             .current_dir(&workdir).output().unwrap();
-        return Err("Patch did not apply successfully");
+        Err("Patch did not apply successfully")
     }
 }
 

@@ -28,6 +28,11 @@ We like to follow the [Rust Guidelines](https://aturon.github.io/)
 where possible - patches to fix existing non-compliant code are
 welcome!
 
+If you're using a nightly Rust toolchain, you can use the
+[clippy](https://github.com/Manishearth/rust-clippy) linter: `cargo
++nightly install clippy` to install, and `cargo +nightly clippy` to
+run.
+
 When your patch involves creating a new file, where possible please
 use a header along the lines of:
 

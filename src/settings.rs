@@ -59,7 +59,7 @@ pub struct Project {
 
 impl Project {
     pub fn get_repo(&self) -> Result<Repository, Error> {
-        return Repository::open(&self.repository);
+        Repository::open(&self.repository)
     }
 }
 

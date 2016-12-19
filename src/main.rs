@@ -99,7 +99,7 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         token: settings.jenkins.token.clone(),
     };
     let project = project.clone();
-    for job_params in project.jobs.iter() {
+    for job_params in &project.jobs {
         let job_name = job_params.get("job").unwrap();
         let mut jenkins_params = Vec::<(&str, &str)>::new();
         for (param_name, param_value) in job_params.iter() {
@@ -107,21 +107,21 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
             match param_name.as_ref() {
                 // TODO: Validate special parameter names in config at start of program
                 "job" => { },
-                "remote" => jenkins_params.push((&param_value, &project.remote_uri)),
-                "branch" => jenkins_params.push((&param_value, &tag)),
-                _ => jenkins_params.push((&param_name, &param_value)),
+                "remote" => jenkins_params.push((param_value, &project.remote_uri)),
+                "branch" => jenkins_params.push((param_value, tag)),
+                _ => jenkins_params.push((param_name, param_value)),
             }
         }
         info!("Starting job: {}", &job_name);
-        let res = jenkins.start_test(&job_name, jenkins_params)
+        let res = jenkins.start_test(job_name, jenkins_params)
             .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
         debug!("{:?}", &res);
         let build_url_real;
         loop {
             let build_url = jenkins.get_build_url(&res);
-            match build_url {
-                Some(url) => { build_url_real = url; break; },
-                None => { },
+            if let Some(url) = build_url {
+                build_url_real = url;
+                break;
             }
         }
         debug!("Build URL: {}", build_url_real);
@@ -150,7 +150,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
 
     let mut push_callbacks = RemoteCallbacks::new();
     push_callbacks.credentials(|_, _, _| {
-        return Cred::ssh_key_from_agent("git");
+        Cred::ssh_key_from_agent("git")
     });
 
     let mut push_opts = PushOptions::new();
@@ -175,12 +175,10 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
             .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
         debug!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
 
-        let output = git::apply_patch(&repo, &path);
+        let output = git::apply_patch(&repo, path);
 
-        match output {
-            Ok(_) => git::push_to_remote(
-                &mut remote, &tag, &mut push_opts).unwrap(),
-            _ => {}
+        if output.is_ok() {
+            git::push_to_remote(&mut remote, &tag, &mut push_opts).unwrap();
         }
 
         git::checkout_branch(&repo, &branch_name);
@@ -219,8 +217,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
 
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
-            return run_tests(&settings_clone, client, &project, &tag,
-                             &branch_name);
+            run_tests(&settings_clone, client, &project, &tag, &branch_name)
         }).unwrap();
         results.append(&mut test.join().unwrap());
 
@@ -238,6 +235,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
     results
 }
 
+#[cfg_attr(feature="cargo-clippy", allow(cyclomatic_complexity))]
 fn main() {
     let mut log_builder = LogBuilder::new();
     // By default, log at the "info" level for every module
@@ -292,7 +290,7 @@ fn main() {
         match settings.projects.get(&args.flag_project) {
             None => panic!("Couldn't find project {}", args.flag_project),
             Some(project) => {
-                test_patch(&settings, &client, &project, &patch);
+                test_patch(&settings, &client, project, patch);
             }
         }
 
@@ -306,7 +304,7 @@ fn main() {
             None => panic!("Couldn't find project {}", &series.project.linkname),
             Some(project) => {
                 let patch = patchwork.get_patch(&series);
-                test_patch(&settings, &client, &project, &patch);
+                test_patch(&settings, &client, project, &patch);
             }
         }
 
@@ -342,7 +340,7 @@ fn main() {
                 },
                 Some(project) => {
                     let patch = patchwork.get_patch(&series);
-                    let results = test_patch(&settings, &client, &project, &patch);
+                    let results = test_patch(&settings, &client, project, &patch);
                     // Delete the temporary directory with the patch in it
                     fs::remove_dir_all(patch.parent().unwrap()).unwrap_or_else(
                         |err| error!("Couldn't delete temp directory: {}", err));

@@ -116,6 +116,7 @@ pub struct PatchworkServer {
 }
 
 impl PatchworkServer {
+    #[cfg_attr(feature="cargo-clippy", allow(ptr_arg))]
     pub fn new(url: &String, client: &std::sync::Arc<Client>) -> PatchworkServer {
         let mut headers = Headers::new();
         headers.set(Accept(vec![qitem(Mime(TopLevel::Application,
@@ -133,6 +134,7 @@ impl PatchworkServer {
         }
     }
 
+    #[cfg_attr(feature="cargo-clippy", allow(ptr_arg))]
     pub fn set_authentication(&mut self, username: &String, password: &Option<String>) {
         self.headers.set(Authorization(Basic {
             username: username.clone(),
