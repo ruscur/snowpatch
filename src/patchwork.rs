@@ -23,10 +23,10 @@ use std::result::Result;
 
 use tempdir::TempDir;
 
-// TODO: this line is required here, but why?
-extern crate hyper;
+use hyper;
 use hyper::Client;
-use hyper::header::{Connection, Headers, Accept, ContentType, qitem, Authorization, Basic};
+use hyper::header::{Connection, Headers, Accept, ContentType, qitem,
+                    Authorization, Basic};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use hyper::status::StatusCode;
 use hyper::client::response::Response;
