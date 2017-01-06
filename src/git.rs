@@ -80,6 +80,9 @@ pub fn apply_patch(repo: &Repository, path: &Path)
                  String::from_utf8(output.clone().stdout).unwrap());
         Ok(output)
     } else {
+        info!("Patch failed to apply with text {} {}",
+              String::from_utf8(output.clone().stdout).unwrap(),
+              String::from_utf8(output.clone().stderr).unwrap());
         Command::new("git").arg("am").arg("--abort")
             .current_dir(&workdir).output().unwrap();
         Err("Patch did not apply successfully")
