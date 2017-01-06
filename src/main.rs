@@ -376,6 +376,6 @@ fn main() {
             }
         }
         info!("Finished testing new revisions, sleeping.");
-        thread::sleep(Duration::new(settings.patchwork.polling_interval, 0));
+        thread::sleep(Duration::new(settings.patchwork.polling_interval * 60, 0));
     }
 }
