@@ -58,10 +58,45 @@ pub fn pull(repo: &Repository) -> Result<Output, &'static str> {
 }
 
 pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
+    let workdir = repo.workdir().unwrap(); // TODO: support bare repositories
+
+    // Make sure there's no junk lying around before we switch
+    Command::new("git")
+        .arg("reset")
+        .arg("--hard")
+        .current_dir(&workdir)
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .arg("clean")
+        .arg("-f") // force remove files we don't need
+        .arg("-d") // ...including directories
+        .current_dir(&workdir)
+        .output()
+        .unwrap();
+
     repo.set_head(&format!("{}/{}", GIT_REF_BASE, &branch))
         .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
     repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
         .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
+
+    // Clean up again, just to be super sure
+    Command::new("git")
+        .arg("reset")
+        .arg("--hard")
+        .current_dir(&workdir)
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .arg("clean")
+        .arg("-f") // force remove files we don't need
+        .arg("-d") // ...including directories
+        .current_dir(&workdir)
+        .output()
+        .unwrap();
+    ()
 }
 
 pub fn apply_patch(repo: &Repository, path: &Path)
