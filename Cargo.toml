@@ -32,14 +32,15 @@ keywords = ["CI", "continuous integration", "patch", "patchwork", "jenkins",
 name = "snowpatch"
 
 [dependencies]
-hyper = ">0.9.2" # 0.9.2 or later required for proxy support
-git2 = "0.4"
+hyper = "0.10"
+hyper-openssl = "0.2"
+git2 = "0.6"
 rustc-serialize = "0.3"
 url = "1.2"
 mime = "0.2"
 toml = "0.2"
 tempdir = "0.3"
-docopt = "0.6"
+docopt = "0.7"
 log = "0.3"
 env_logger = "0.3"
 

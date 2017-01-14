@@ -20,6 +20,7 @@
 #![deny(warnings)]
 
 extern crate hyper;
+extern crate hyper_openssl;
 extern crate rustc_serialize;
 extern crate git2;
 extern crate toml;
@@ -33,6 +34,9 @@ extern crate env_logger;
 use git2::{Cred, BranchType, RemoteCallbacks, PushOptions};
 
 use hyper::Client;
+use hyper::client::ProxyConfig;
+use hyper::net::HttpsConnector;
+use hyper_openssl::OpensslClient;
 
 use docopt::Docopt;
 
@@ -256,6 +260,8 @@ fn main() {
 
     // The HTTP client we'll use to access the APIs
     // TODO: HTTPS support, not yet implemented in Hyper as of 0.9.6
+    let ssl = OpensslClient::new().unwrap();
+    let connector = HttpsConnector::new(ssl.clone());
     let client = Arc::new(match env::var("http_proxy") {
         Ok(proxy_url) => {
             debug!("snowpatch is using HTTP proxy {}", proxy_url);
@@ -266,8 +272,11 @@ fn main() {
             assert!(proxy.scheme() == "http");
             // This should pass even if no trailing slash is in http_proxy
             assert!(proxy.path() == "/");
-            Client::with_http_proxy(proxy.host_str().unwrap().to_string(),
-                proxy.port().unwrap_or(80))
+            let proxy_config = ProxyConfig::new(proxy.scheme(),
+                                                proxy.host_str().unwrap().to_string(),
+                                                proxy.port().unwrap_or(80),
+                                                connector, ssl);
+            Client::with_proxy_config(proxy_config)
         },
         _ => {
             debug!("snowpatch starting without a HTTP proxy");
