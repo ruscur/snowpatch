@@ -69,6 +69,7 @@ pub fn apply_patch(repo: &Repository, path: &Path)
     // We call out to "git am" since libgit2 doesn't implement "am"
     let output = Command::new("git")
         .arg("am") // apply from mbox
+        .arg("-3") // three way merge
         .arg(&path) // from our mbox file
         .current_dir(&workdir) // in the repo's working directory
         .output() // run synchronously
