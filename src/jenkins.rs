@@ -22,7 +22,6 @@
 
 extern crate hyper;
 extern crate url;
-extern crate rustc_serialize;
 
 use std::io::Read;
 use std::time::Duration;
@@ -33,7 +32,7 @@ use std::collections::BTreeMap;
 use hyper::Client;
 use hyper::client::{IntoUrl, RequestBuilder};
 use hyper::header::{Headers, Basic, Authorization, Location};
-use rustc_serialize::json::Json;
+use serde_json::{self, Value};
 
 use patchwork::TestState;
 
@@ -106,15 +105,16 @@ impl JenkinsBackend {
         self.hyper_client.post(url).headers(self.headers())
     }
 
-    fn get_api_json_object(&self, base_url: &str) -> rustc_serialize::json::Object {
+    fn get_api_json_object(&self, base_url: &str) -> Value {
         // TODO: Don't panic on failure, fail more gracefully
         let url = format!("{}api/json", base_url);
         let mut resp = self.get(&url).send().expect("HTTP request error");
         let mut result_str = String::new();
         resp.read_to_string(&mut result_str)
             .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
-        let json = Json::from_str(&result_str).unwrap_or_else(|err| panic!("Couldn't parse JSON from Jenkins: {}", err));
-        json.as_object().unwrap().clone()
+        serde_json::from_str(&result_str).unwrap_or_else(
+            |err| panic!("Couldn't parse JSON from Jenkins: {}", err)
+        )
     }
 
     pub fn get_build_url(&self, build_queue_entry: &str) -> Option<String> {
@@ -124,9 +124,9 @@ impl JenkinsBackend {
                 Some(exec) => return Some(exec
                                           .as_object() // Option<BTreeMap>
                                           .unwrap() // BTreeMap
-                                          .get("url") // Option<&str> ?
+                                          .get("url") // Option<&str>
                                           .unwrap() // &str ?
-                                          .as_string()
+                                          .as_str()
                                           .unwrap()
                                           .to_string()),
                 None => sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL)),
@@ -135,7 +135,7 @@ impl JenkinsBackend {
     }
 
     pub fn get_build_status(&self, build_url: &str) -> JenkinsBuildStatus {
-        if self.get_api_json_object(build_url)["building"].as_boolean().unwrap() {
+        if self.get_api_json_object(build_url)["building"].as_bool().unwrap() {
             JenkinsBuildStatus::Running
         } else {
             JenkinsBuildStatus::Done
@@ -144,13 +144,13 @@ impl JenkinsBackend {
 
     pub fn get_build_result(&self, build_url: &str) -> Option<TestState> {
         match self.get_api_json_object(build_url).get("result").unwrap()
-            .as_string() {
+            .as_str() {
             None => None,
             Some(result) => match result { // TODO: Improve this...
-                "SUCCESS" => Some(TestState::success),
-                "FAILURE" => Some(TestState::failure),
-                "UNSTABLE" => Some(TestState::warning),
-                _ => Some(TestState::pending),
+                "SUCCESS" => Some(TestState::Success),
+                "FAILURE" => Some(TestState::Fail),
+                "UNSTABLE" => Some(TestState::Warning),
+                _ => Some(TestState::Pending),
             },
         }
     }

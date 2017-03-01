@@ -31,7 +31,7 @@ use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use hyper::status::StatusCode;
 use hyper::client::response::Response;
 
-use rustc_serialize::json::{self, DecoderError};
+use serde_json;
 
 use utils;
 
@@ -41,7 +41,7 @@ pub static PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expa
 
 // /api/1.0/projects/*/series/
 
-#[derive(RustcDecodable, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct Project {
     pub id: u64,
     pub name: String,
@@ -52,13 +52,13 @@ pub struct Project {
     pub webscm_url: Option<String>
 }
 
-#[derive(RustcDecodable, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct Submitter {
     pub id: u64,
     pub name: String
 }
 
-#[derive(RustcDecodable, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct Series {
     pub id: u64,
     pub project: Project,
@@ -72,7 +72,7 @@ pub struct Series {
     pub test_state: Option<String>
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize)]
 pub struct SeriesList {
     pub count: u64,
     pub next: Option<String>,
@@ -80,24 +80,26 @@ pub struct SeriesList {
     pub results: Option<Vec<Series>>
 }
 
-// TODO: remove this when we have Jenkins result handling
-#[allow(warnings)] // for not being camelcase because encoding
-#[derive(RustcEncodable, Clone)]
+#[derive(Serialize, Clone)]
 pub enum TestState {
-    pending,
-    success,
-    warning,
-    failure,
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "success")]
+    Success,
+    #[serde(rename = "warning")]
+    Warning,
+    #[serde(rename = "fail")]
+    Fail,
 }
 
 impl Default for TestState {
     fn default() -> TestState {
-        TestState::pending
+        TestState::Pending
     }
 }
 
 // /api/1.0/series/*/revisions/*/test-results/
-#[derive(RustcEncodable)]
+#[derive(Serialize)]
 pub struct TestResult {
     pub test_name: String,
     pub state: TestState,
@@ -149,7 +151,7 @@ impl PatchworkServer {
     pub fn post_test_result(&self, result: TestResult,
                             series_id: &u64, series_revision: &u64)
                             -> Result<StatusCode, hyper::error::Error> {
-        let encoded = json::encode(&result).unwrap();
+        let encoded = serde_json::to_string(&result).unwrap();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
         let res = try!(self.client.post(&format!(
@@ -160,10 +162,10 @@ impl PatchworkServer {
         Ok(res.status)
     }
 
-    pub fn get_series(&self, series_id: &u64) -> Result<Series, DecoderError> {
+    pub fn get_series(&self, series_id: &u64) -> Result<Series, serde_json::Error> {
         let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
                           series_id, PATCHWORK_QUERY);
-        json::decode(&self.get(&url).unwrap())
+        serde_json::from_str(&self.get(&url).unwrap())
     }
 
     pub fn get_series_mbox(&self, series_id: &u64, series_revision: &u64)
@@ -174,10 +176,10 @@ impl PatchworkServer {
             .header(Connection::close()).send()
     }
 
-    pub fn get_series_query(&self) -> Result<SeriesList, DecoderError> {
+    pub fn get_series_query(&self) -> Result<SeriesList, serde_json::Error> {
         let url = format!("{}{}/series/{}", &self.url,
                           PATCHWORK_API, PATCHWORK_QUERY);
-        json::decode(&self.get(&url).unwrap_or_else(
+        serde_json::from_str(&self.get(&url).unwrap_or_else(
             |err| panic!("Failed to connect to Patchwork: {}", err)))
     }
 

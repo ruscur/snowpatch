@@ -23,13 +23,17 @@ extern crate hyper;
 extern crate hyper_openssl;
 extern crate rustc_serialize;
 extern crate git2;
-extern crate toml;
 extern crate tempdir;
 extern crate docopt;
 extern crate url;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
+extern crate toml;
 
 use git2::{BranchType, RemoteCallbacks, PushOptions};
 
@@ -200,7 +204,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
                 successfully_applied = true;
                 results.push(TestResult {
                     test_name: "apply_patch".to_string(),
-                    state: TestState::success,
+                    state: TestState::Success,
                     url: None,
                     summary: Some(format!("Successfully applied to branch {}", branch_name)),
                 });
@@ -209,7 +213,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
                 // It didn't apply.  No need to bother testing.
                 results.push(TestResult {
                     test_name: "apply_patch".to_string(),
-                    state: TestState::warning,
+                    state: TestState::Warning,
                     url: None,
                     summary: Some(format!("Failed to apply to branch {}", branch_name)),
                 });
@@ -235,7 +239,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
     if !successfully_applied {
         results.push(TestResult {
             test_name: "apply_patch".to_string(),
-            state: TestState::failure,
+            state: TestState::Fail,
             url: None,
             summary: Some("Failed to apply to any branch".to_string()),
         });
@@ -260,7 +264,7 @@ fn main() {
         .and_then(|d| d.version(Some(version)).decode())
         .unwrap_or_else(|e| e.exit());
 
-    let settings = settings::parse(args.arg_config_file);
+    let settings = settings::parse(&args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
     // TODO: HTTPS support, not yet implemented in Hyper as of 0.9.6
