@@ -21,9 +21,9 @@ private_key = "/home/ruscur/.ssh/id_rsa"
 
 [patchwork]
 url = "https://russell.cc/patchwork"
-port = 443 #optional
-user = "ruscur" #TODO: make pushing results configurable,
-pass = "banana" #      and these arguments optional
+port = 443 # optional
+user = "ruscur" # optional, needed for pushing results
+pass = "banana" # optional, needed for pushing results
 polling_interval = 10 # polling interval in minutes
 
 [jenkins]
@@ -43,6 +43,17 @@ token = "33333333333333333333333333333333"
     remote_uri = "git@github.com:ruscur/skiboot.git"
     push_results = false
 
+        [[projects.skiboot.jobs]]
+        job = "skiboot-compile-test-snowpatch"
+        remote = "GIT_REPO"
+        branch = "GIT_REF"
+
+        [[projects.skiboot.jobs]]
+        job = "skiboot-boot-test-snowpatch"
+        remote = "GIT_REPO"
+        branch = "GIT_REF"
+        artifact = "snowpatch.txt"
+
     [projects.linuxppc-dev]
     repository = "/home/ruscur/Documents/linux"
     branches = ["master", "powerpc-next"]
@@ -53,16 +64,14 @@ token = "33333333333333333333333333333333"
 
         [[projects.linuxppc-dev.jobs]]
         job = "linux-build-manual"
-        remote = "GIT_REPO_TO_USE"
-        branch = "GIT_REF_TO_BUILD"
+        remote = "GIT_REPO"
+        branch = "GIT_REF"
         artifact = "snowpatch.txt"
-        USER_EMAIL = "username"
         DEFCONFIG_TO_USE = "pseries_le_defconfig"
 
         [[projects.linuxppc-dev.jobs]]
         job = "linux-build-manual"
-        remote = "GIT_REPO_TO_USE"
-        branch = "GIT_REF_TO_BUILD"
+        remote = "GIT_REPO"
+        branch = "GIT_REF"
         artifact = "snowpatch.txt"
-        USER_EMAIL = "username"
         DEFCONFIG_TO_USE = "ppc64le_defconfig"
