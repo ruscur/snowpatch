@@ -16,8 +16,11 @@
 
 use toml;
 
+use serde::de::{self, MapVisitor, Visitor, Deserializer, Deserialize};
+
 use git2::{Repository, Error};
 
+use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
@@ -58,13 +61,94 @@ pub struct Project {
     pub test_all_branches: Option<bool>,
     pub remote_name: String,
     pub remote_uri: String,
-    pub jobs: Vec<BTreeMap<String, String>>,
-    pub push_results: bool
+    pub jobs: Vec<Job>,
+    pub push_results: bool,
 }
 
 impl Project {
     pub fn get_repo(&self) -> Result<Repository, Error> {
         Repository::open(&self.repository)
+    }
+}
+
+#[derive(Clone)]
+pub struct Job {
+    pub job: String,
+    pub title: String,
+    pub remote: String,
+    pub branch: String,
+    pub parameters: BTreeMap<String, String>,
+}
+
+impl Deserialize for Job {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer
+    {
+        struct JobVisitor;
+
+        impl Visitor for JobVisitor {
+            type Value = Job;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct Job with arbitrary fields")
+            }
+
+            fn visit_map<V>(self, mut visitor: V) -> Result<Job, V::Error>
+                where V: MapVisitor
+            {
+                let mut job = None;
+                let mut title = None;
+                let mut remote = None;
+                let mut branch = None;
+                let mut parameters = BTreeMap::new();
+                while let Some(key) = visitor.visit_key::<String>()? {
+                    match key.as_str() {
+                        "job" => {
+                            if job.is_some() {
+                                return Err(de::Error::duplicate_field("job"));
+                            }
+                            job = Some(visitor.visit_value()?);
+                        }
+                        "title" => {
+                            if title.is_some() {
+                                return Err(de::Error::duplicate_field("title"));
+                            }
+                            title = Some(visitor.visit_value()?);
+                        }
+                        "remote" => {
+                            if remote.is_some() {
+                                return Err(de::Error::duplicate_field("remote"));
+                            }
+                            remote = Some(visitor.visit_value()?);
+                        }
+                        "branch" => {
+                            if branch.is_some() {
+                                return Err(de::Error::duplicate_field("branch"));
+                            }
+                            branch = Some(visitor.visit_value()?);
+                        }
+                        _ => {
+                            parameters.insert(key, visitor.visit_value()?);
+                        }
+                    }
+                }
+
+                let job: String = job.ok_or_else(|| de::Error::missing_field("job"))?;
+                let remote = remote.ok_or_else(|| de::Error::missing_field("remote"))?;
+                let branch = branch.ok_or_else(|| de::Error::missing_field("branch"))?;
+                let title = title.unwrap_or(job.clone());
+
+                Ok(Job {
+                    job: job,
+                    title: title,
+                    remote: remote,
+                    branch: branch,
+                    parameters: parameters,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(JobVisitor)
     }
 }
 
@@ -74,13 +158,6 @@ pub struct Config {
     pub patchwork: Patchwork,
     pub jenkins: Jenkins,
     pub projects: BTreeMap<String, Project>
-}
-
-pub fn get_job_title(job: &BTreeMap<String, String>) -> String {
-    match job.get("title") {
-        Some(title) => title.to_string(),
-        None => job.get("job").unwrap().to_string()
-    }
 }
 
 pub fn parse(path: &str) -> Config {
