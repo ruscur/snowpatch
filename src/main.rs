@@ -277,9 +277,9 @@ fn main() {
                 panic!("http_proxy is malformed: {:?}, error: {}", proxy_url, e);
             });
             assert!(proxy.has_host());
-            assert!(proxy.scheme() == "http");
+            assert_eq!(proxy.scheme(), "http");
             // This should pass even if no trailing slash is in http_proxy
-            assert!(proxy.path() == "/");
+            assert_eq!(proxy.path(), "/");
             let proxy_config = ProxyConfig::new(proxy.scheme(),
                                                 proxy.host_str().unwrap().to_string(),
                                                 proxy.port().unwrap_or(80),
