@@ -104,3 +104,25 @@ pub fn parse(path: &str) -> Config {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use settings::*;
+
+    #[test]
+    #[should_panic(expected = "Couldn't open config file")]
+    fn bad_path() {
+        parse("/nonexistent/config.file");
+    }
+
+    #[test]
+    fn parse_example_openpower() {
+        parse("examples/openpower.toml");
+    }
+
+    #[test]
+    #[should_panic(expected = "Could not parse configuration file, exiting")]
+    fn parse_example_invalid() {
+        parse("examples/tests/invalid.toml");
+    }
+}
