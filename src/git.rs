@@ -136,10 +136,3 @@ pub fn cred_from_settings(settings: &Git) -> Result<Cred, Error> {
                   Path::new(&settings.private_key),
                   passphrase)
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn get_commit() {
-    }
-}
