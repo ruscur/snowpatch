@@ -263,9 +263,9 @@ fn main() {
     let settings = settings::parse(&args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
-    // TODO: HTTPS support, not yet implemented in Hyper as of 0.9.6
     let ssl = OpensslClient::new().unwrap();
     let connector = HttpsConnector::new(ssl.clone());
+    // TODO: Handle https_proxy
     let client = Arc::new(match env::var("http_proxy") {
         Ok(proxy_url) => {
             debug!("snowpatch is using HTTP proxy {}", proxy_url);
@@ -286,7 +286,7 @@ fn main() {
         },
         _ => {
             debug!("snowpatch starting without a HTTP proxy");
-            let mut c = Client::new();
+            let mut c = Client::with_connector(connector);
             c.set_redirect_policy(RedirectPolicy::FollowAll);
             c
         }
