@@ -16,7 +16,7 @@
 
 use toml;
 
-use serde::de::{self, MapVisitor, Visitor, Deserializer, Deserialize};
+use serde::de::{self, Visitor, Deserializer, Deserialize, MapAccess};
 
 use git2::{Repository, Error};
 
@@ -80,55 +80,55 @@ pub struct Job {
     pub parameters: BTreeMap<String, String>,
 }
 
-impl Deserialize for Job {
+impl<'de> Deserialize<'de> for Job {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer
+        where D: Deserializer<'de>
     {
         struct JobVisitor;
 
-        impl Visitor for JobVisitor {
+        impl<'de> Visitor<'de> for JobVisitor {
             type Value = Job;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("struct Job with arbitrary fields")
             }
 
-            fn visit_map<V>(self, mut visitor: V) -> Result<Job, V::Error>
-                where V: MapVisitor
+            fn visit_map<A>(self, mut map: A) -> Result<Job, A::Error>
+                where A: MapAccess<'de>
             {
                 let mut job = None;
                 let mut title = None;
                 let mut remote = None;
                 let mut branch = None;
                 let mut parameters = BTreeMap::new();
-                while let Some(key) = visitor.visit_key::<String>()? {
+                while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
                         "job" => {
                             if job.is_some() {
                                 return Err(de::Error::duplicate_field("job"));
                             }
-                            job = Some(visitor.visit_value()?);
+                            job = Some(map.next_value()?);
                         }
                         "title" => {
                             if title.is_some() {
                                 return Err(de::Error::duplicate_field("title"));
                             }
-                            title = Some(visitor.visit_value()?);
+                            title = Some(map.next_value()?);
                         }
                         "remote" => {
                             if remote.is_some() {
                                 return Err(de::Error::duplicate_field("remote"));
                             }
-                            remote = Some(visitor.visit_value()?);
+                            remote = Some(map.next_value()?);
                         }
                         "branch" => {
                             if branch.is_some() {
                                 return Err(de::Error::duplicate_field("branch"));
                             }
-                            branch = Some(visitor.visit_value()?);
+                            branch = Some(map.next_value()?);
                         }
                         _ => {
-                            parameters.insert(key, visitor.visit_value()?);
+                            parameters.insert(key, map.next_value()?);
                         }
                     }
                 }
