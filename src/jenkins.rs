@@ -108,10 +108,18 @@ impl JenkinsBackend {
     fn get_api_json_object(&self, base_url: &str) -> Value {
         // TODO: Don't panic on failure, fail more gracefully
         let url = format!("{}api/json", base_url);
-        let mut resp = self.get(&url).send().expect("HTTP request error");
         let mut result_str = String::new();
-        resp.read_to_string(&mut result_str)
-            .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
+        loop {
+            let mut resp = self.get(&url).send().expect("HTTP request error");
+
+            if resp.status.is_server_error() {
+                sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
+                continue;
+            }
+            resp.read_to_string(&mut result_str)
+                .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
+            break;
+       }
         serde_json::from_str(&result_str).unwrap_or_else(
             |err| panic!("Couldn't parse JSON from Jenkins: {}", err)
         )

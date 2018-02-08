@@ -14,7 +14,7 @@ patches, applies patches on top of an existing tree, triggers appropriate
 builds and test suites, and reports the results.
 
 At present, snowpatch supports
-[patchwork-freedesktop](http://github.com/dlespiau/patchwork) and
+[Patchwork](http://jk.ozlabs.org/projects/patchwork/) and
 [Jenkins](http://jenkins-ci.org).
 
 snowpatch is named in honour of

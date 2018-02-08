@@ -39,8 +39,10 @@ pub struct Git {
 pub struct Patchwork {
     pub url: String,
     pub port: Option<u16>,
+    // TODO: Enforce (user, pass) XOR token
     pub user: Option<String>,
     pub pass: Option<String>,
+    pub token: Option<String>,
     pub polling_interval: u64,
 }
 
@@ -63,6 +65,7 @@ pub struct Project {
     pub remote_uri: String,
     pub jobs: Vec<Job>,
     pub push_results: bool,
+    pub category: Option<String>,
 }
 
 impl Project {

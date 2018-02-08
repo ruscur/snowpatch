@@ -18,8 +18,9 @@ use std;
 use std::io::{self};
 use std::option::Option;
 use std::path::PathBuf;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::result::Result;
+use std::collections::BTreeMap;
 
 use tempdir::TempDir;
 
@@ -31,56 +32,130 @@ use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use hyper::status::StatusCode;
 use hyper::client::response::Response;
 
+use serde::{self, Serializer};
 use serde_json;
 
 use utils;
 
 // TODO: more constants.  constants for format strings of URLs and such.
 pub static PATCHWORK_API: &'static str = "/api/1.0";
-pub static PATCHWORK_QUERY: &'static str = "?ordering=-last_updated&related=expand";
+pub static PATCHWORK_QUERY: &'static str = "?order=-id";
 
-// /api/1.0/projects/*/series/
+#[derive(Deserialize, Clone)]
+pub struct SubmitterSummary {
+    pub id: u64,
+    pub url: String,
+    pub name: String,
+    pub email: String
+}
 
+#[derive(Deserialize, Clone)]
+pub struct DelegateSummary {
+    pub id: u64,
+    pub url: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String
+}
+
+// /api/1.0/projects/{id}
 #[derive(Deserialize, Clone)]
 pub struct Project {
     pub id: u64,
+    pub url: String,
     pub name: String,
-    pub linkname: String,
-    pub listemail: String,
+    pub link_name: String,
+    pub list_email: String,
+    pub list_id: String,
     pub web_url: Option<String>,
     pub scm_url: Option<String>,
-    pub webscm_url: Option<String>
+    pub webscm_url: Option<String>,
+}
+
+// /api/1.0/patches/
+// This omits fields from /patches/{id}, deal with it for now.
+
+#[derive(Deserialize, Clone)]
+pub struct Patch {
+    pub id: u64,
+    pub url: String,
+    pub project: Project,
+    pub msgid: String,
+    pub date: String,
+    pub name: String,
+    pub commit_ref: Option<String>,
+    pub pull_url: Option<String>,
+    pub state: String, // TODO enum of possible states
+    pub archived: bool,
+    pub hash: Option<String>,
+    pub submitter: SubmitterSummary,
+    pub delegate: Option<DelegateSummary>,
+    pub mbox: String,
+    pub series: Vec<SeriesSummary>,
+    pub check: String, // TODO enum of possible states
+    pub checks: String,
+    pub tags: BTreeMap<String, u64>
+}
+
+impl Patch {
+    pub fn has_series(&self) -> bool {
+        !&self.series.is_empty()
+    }
+
+    pub fn action_required(&self) -> bool {
+        &self.state == "new" || &self.state == "under-review"
+    }
 }
 
 #[derive(Deserialize, Clone)]
-pub struct Submitter {
+pub struct PatchSummary {
+    pub date: String,
     pub id: u64,
-    pub name: String
+    pub mbox: String,
+    pub msgid: String,
+    pub name: String,
+    pub url: String
 }
 
+#[derive(Deserialize, Clone)]
+pub struct CoverLetter {
+    pub date: String,
+    pub id: u64,
+    pub msgid: String,
+    pub name: String,
+    pub url: String
+}
+
+// /api/1.0/series/
+// The series list and /series/{id} are the same, luckily
 #[derive(Deserialize, Clone)]
 pub struct Series {
+    pub cover_letter: Option<CoverLetter>,
+    pub date: String,
     pub id: u64,
+    pub mbox: String,
+    pub name: Option<String>,
+    pub patches: Vec<PatchSummary>,
     pub project: Project,
-    pub name: String,
-    pub n_patches: u64,
-    pub submitter: Submitter,
-    pub submitted: String,
-    pub last_updated: String,
+    pub received_all: bool,
+    pub received_total: u64,
+    pub submitter: SubmitterSummary,
+    pub total: u64,
+    pub url: String,
+    pub version: u64
+}
+
+#[derive(Deserialize, Clone)]
+pub struct SeriesSummary {
+    pub id: u64,
+    pub url: String,
+    pub date: String,
+    pub name: Option<String>,
     pub version: u64,
-    pub reviewer: Option<String>,
-    pub test_state: Option<String>
+    pub mbox: String,
 }
 
-#[derive(Deserialize)]
-pub struct SeriesList {
-    pub count: u64,
-    pub next: Option<String>,
-    pub previous: Option<String>,
-    pub results: Option<Vec<Series>>
-}
-
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, PartialEq)]
 pub enum TestState {
     #[serde(rename = "pending")]
     Pending,
@@ -99,12 +174,39 @@ impl Default for TestState {
 }
 
 // /api/1.0/series/*/revisions/*/test-results/
-#[derive(Serialize)]
+#[derive(Serialize, Default, Clone)]
 pub struct TestResult {
-    pub test_name: String,
     pub state: TestState,
-    pub url: Option<String>,
-    pub summary: Option<String>
+    #[serde(serialize_with = "TestResult::serialize_target_url")]
+    pub target_url: Option<String>,
+    pub description: Option<String>,
+    #[serde(serialize_with = "TestResult::serialize_context")]
+    pub context: Option<String>,
+}
+
+impl TestResult {
+    fn serialize_target_url<S>(target_url: &Option<String>, ser: S)
+                               -> Result<S::Ok, S::Error> where S: Serializer {
+        if target_url.is_none() {
+            serde::Serialize::serialize(&Some("http://no.url".to_string()), ser)
+        } else {
+            serde::Serialize::serialize(target_url, ser)
+        }
+    }
+
+    fn serialize_context<S>(context: &Option<String>, ser: S)
+                            -> Result<S::Ok, S::Error> where S: Serializer {
+        if context.is_none() {
+            serde::Serialize::serialize(
+                &Some(format!("{}-{}",
+                              env!("CARGO_PKG_NAME"),
+                              env!("CARGO_PKG_VERSION")).to_string()
+                      .replace(".", "_")),
+                ser)
+        } else {
+            serde::Serialize::serialize(context, ser)
+        }
+    }
 }
 
 pub struct PatchworkServer {
@@ -133,14 +235,31 @@ impl PatchworkServer {
     }
 
     #[cfg_attr(feature="cargo-clippy", allow(ptr_arg))]
-    pub fn set_authentication(&mut self, username: &String, password: &Option<String>) {
-        self.headers.set(Authorization(Basic {
-            username: username.clone(),
-            password: password.clone(),
-        }));
+    pub fn set_authentication(&mut self, username: &Option<String>,
+                              password: &Option<String>,
+                              token: &Option<String>) {
+        match (username, password, token) {
+            (&None, &None, &Some(ref token)) => {
+                self.headers.set(Authorization(
+                    format!("Token {}", token)));
+            },
+            (&Some(ref username), &Some(ref password), &None) => {
+                self.headers.set(Authorization(Basic {
+                    username: username.clone(),
+                    password: Some(password.clone()),
+                }));
+            },
+            _ => panic!("Invalid patchwork authentication details"),
+        }
     }
 
-    fn get(&self, url: &str) -> std::result::Result<String, hyper::error::Error> {
+    pub fn get_url(&self, url: &str)
+                   -> std::result::Result<Response, hyper::error::Error> {
+        self.client.get(&*url).headers(self.headers.clone())
+            .header(Connection::close()).send()
+    }
+
+    pub fn get_url_string(&self, url: &str) -> std::result::Result<String, hyper::error::Error> {
         let mut resp = try!(self.client.get(&*url).headers(self.headers.clone())
                             .header(Connection::close()).send());
         let mut body: Vec<u8> = vec![];
@@ -148,51 +267,63 @@ impl PatchworkServer {
         Ok(String::from_utf8(body).unwrap())
     }
 
-    pub fn post_test_result(&self, result: TestResult,
-                            series_id: &u64, series_revision: &u64)
+    pub fn post_test_result(&self, result: TestResult, checks_url: &str)
                             -> Result<StatusCode, hyper::error::Error> {
         let encoded = serde_json::to_string(&result).unwrap();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
-        let res = try!(self.client.post(&format!(
-            "{}{}/series/{}/revisions/{}/test-results/",
-            &self.url, PATCHWORK_API, &series_id, &series_revision))
-            .headers(headers).body(&encoded).send());
-        assert_eq!(res.status, hyper::status::StatusCode::Created);
-        Ok(res.status)
+        let mut resp = try!(self.client.post(checks_url)
+                        .headers(headers).body(&encoded).send());
+        let mut body: Vec<u8> = vec![];
+        io::copy(&mut resp, &mut body).unwrap();
+        trace!("{}", String::from_utf8(body).unwrap());
+        assert_eq!(resp.status, hyper::status::StatusCode::Created);
+        Ok(resp.status)
     }
 
-    pub fn get_series(&self, series_id: &u64) -> Result<Series, serde_json::Error> {
-        let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
-                          series_id, PATCHWORK_QUERY);
-        serde_json::from_str(&self.get(&url).unwrap())
+    pub fn get_project(&self, url: &str) -> Result<Project, serde_json::Error> {
+        serde_json::from_str(&self.get_url_string(url).unwrap())
     }
 
-    pub fn get_series_mbox(&self, series_id: &u64, series_revision: &u64)
-                           -> std::result::Result<Response, hyper::error::Error> {
-        let url = format!("{}{}/series/{}/revisions/{}/mbox/",
-                               &self.url, PATCHWORK_API, series_id, series_revision);
-        self.client.get(&*url).headers(self.headers.clone())
-            .header(Connection::close()).send()
+    pub fn get_patch(&self, patch_id: &u64) -> Result<Patch, serde_json::Error> {
+        let url = format!("{}{}/patches/{}{}", &self.url, PATCHWORK_API,
+                          patch_id, PATCHWORK_QUERY);
+        serde_json::from_str(&self.get_url_string(&url).unwrap())
     }
 
-    pub fn get_series_query(&self) -> Result<SeriesList, serde_json::Error> {
-        let url = format!("{}{}/series/{}", &self.url,
-                          PATCHWORK_API, PATCHWORK_QUERY);
-        serde_json::from_str(&self.get(&url).unwrap_or_else(
+    pub fn get_patch_by_url(&self, url: &str) -> Result<Patch, serde_json::Error> {
+        serde_json::from_str(&self.get_url_string(url).unwrap())
+    }
+
+    pub fn get_patch_query(&self) -> Result<Vec<Patch>, serde_json::Error> {
+        let url = format!("{}{}/patches/{}", &self.url, PATCHWORK_API, PATCHWORK_QUERY);
+        serde_json::from_str(&self.get_url_string(&url).unwrap_or_else(
             |err| panic!("Failed to connect to Patchwork: {}", err)))
     }
 
-    pub fn get_patch(&self, series: &Series) -> PathBuf {
+    pub fn get_patch_dependencies(&self, patch: &Patch) -> Vec<Patch> {
+        // We assume the list of patches in a series are in order.
+        let mut dependencies: Vec<Patch> = vec!();
+        let series = self.get_series_by_url(&patch.series[0].url);
+        if series.is_err() {
+            return dependencies;
+        }
+        for dependency in series.unwrap().patches {
+            dependencies.push(self.get_patch_by_url(&dependency.url).unwrap());
+            if dependency.url == patch.url {
+                break;
+            }
+        }
+        dependencies
+    }
+
+    pub fn get_patch_mbox(&self, patch: &Patch) -> PathBuf {
         let dir = TempDir::new("snowpatch").unwrap().into_path();
         let mut path = dir.clone();
-        let tag = utils::sanitise_path(
-            format!("{}-{}-{}", series.submitter.name,
-                    series.id, series.version));
+        let tag = utils::sanitise_path(patch.name.clone());
         path.push(format!("{}.mbox", tag));
 
-        let mut mbox_resp = self.get_series_mbox(&series.id, &series.version)
-            .unwrap();
+        let mut mbox_resp = self.get_url(&patch.mbox).unwrap();
 
         debug!("Saving patch to file {}", path.display());
         let mut mbox = File::create(&path).unwrap_or_else(
@@ -201,4 +332,37 @@ impl PatchworkServer {
             |err| panic!("Couldn't save mbox from Patchwork: {}", err));
         path
     }
+
+    pub fn get_patches_mbox(&self, patches: Vec<Patch>) -> PathBuf {
+        let dir = TempDir::new("snowpatch").unwrap().into_path();
+        let mut path = dir.clone();
+        let tag = utils::sanitise_path(patches.last().unwrap().name.clone());
+        path.push(format!("{}.mbox", tag));
+
+        let mut mbox = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&path)
+            .unwrap_or_else(|err| panic!("Couldn't make file: {}", err));
+
+        for patch in patches {
+            let mut mbox_resp = self.get_url(&patch.mbox).unwrap();
+            debug!("Appending patch {} to file {}", patch.name, path.display());
+            io::copy(&mut mbox_resp, &mut mbox).unwrap_or_else(
+                |err| panic!("Couldn't save mbox from Patchwork: {}", err));
+        }
+        path
+    }
+
+    pub fn get_series(&self, series_id: &u64) -> Result<Series, serde_json::Error> {
+        let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
+                          series_id, PATCHWORK_QUERY);
+        serde_json::from_str(&self.get_url_string(&url).unwrap())
+    }
+
+    pub fn get_series_by_url(&self, url: &str) -> Result<Series, serde_json::Error> {
+        serde_json::from_str(&self.get_url_string(url).unwrap())
+    }
+
 }
