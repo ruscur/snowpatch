@@ -177,7 +177,6 @@ impl Default for TestState {
 #[derive(Serialize, Default, Clone)]
 pub struct TestResult {
     pub state: TestState,
-    #[serde(serialize_with = "TestResult::serialize_target_url")]
     pub target_url: Option<String>,
     pub description: Option<String>,
     #[serde(serialize_with = "TestResult::serialize_context")]
@@ -185,15 +184,6 @@ pub struct TestResult {
 }
 
 impl TestResult {
-    fn serialize_target_url<S>(target_url: &Option<String>, ser: S)
-                               -> Result<S::Ok, S::Error> where S: Serializer {
-        if target_url.is_none() {
-            serde::Serialize::serialize(&Some("http://no.url".to_string()), ser)
-        } else {
-            serde::Serialize::serialize(target_url, ser)
-        }
-    }
-
     fn serialize_context<S>(context: &Option<String>, ser: S)
                             -> Result<S::Ok, S::Error> where S: Serializer {
         if context.is_none() {
