@@ -140,8 +140,11 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         }
         debug!("Build URL: {}", build_url_real);
         jenkins.wait_build(&build_url_real);
-        let test_result = jenkins.get_build_result(&build_url_real).unwrap();
+        let mut test_result = jenkins.get_build_result(&build_url_real).unwrap();
         info!("Jenkins job for {}/{} complete.", branch_name, job.title);
+        if test_result == TestState::Fail && job.warn_on_fail {
+            test_result = TestState::Warning;
+        }
         results.push(TestResult {
             description: Some(format!("Test {} on branch {}", job.title,
                                       branch_name.to_string()).to_string()),
