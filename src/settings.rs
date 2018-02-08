@@ -80,6 +80,7 @@ pub struct Job {
     pub title: String,
     pub remote: String,
     pub branch: String,
+    pub hefty: bool,
     pub parameters: BTreeMap<String, String>,
 }
 
@@ -103,6 +104,7 @@ impl<'de> Deserialize<'de> for Job {
                 let mut title = None;
                 let mut remote = None;
                 let mut branch = None;
+                let mut hefty = None;
                 let mut parameters = BTreeMap::new();
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
@@ -130,6 +132,12 @@ impl<'de> Deserialize<'de> for Job {
                             }
                             branch = Some(map.next_value()?);
                         }
+                        "hefty" => {
+                            if hefty.is_some() {
+                                return Err(de::Error::duplicate_field("hefty"));
+                            }
+                            hefty = Some(map.next_value()?);
+                        }
                         _ => {
                             parameters.insert(key, map.next_value()?);
                         }
@@ -140,12 +148,14 @@ impl<'de> Deserialize<'de> for Job {
                 let remote = remote.ok_or_else(|| de::Error::missing_field("remote"))?;
                 let branch = branch.ok_or_else(|| de::Error::missing_field("branch"))?;
                 let title = title.unwrap_or(job.clone());
+                let hefty = hefty.unwrap_or(false);
 
                 Ok(Job {
                     job: job,
                     title: title,
                     remote: remote,
                     branch: branch,
+                    hefty: hefty,
                     parameters: parameters,
                 })
             }

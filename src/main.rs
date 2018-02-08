@@ -103,7 +103,7 @@ struct Args {
 }
 
 fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &str,
-             branch_name: &str) -> Vec<TestResult> {
+             branch_name: &str, hefty_tests: bool) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
     let jenkins = JenkinsBackend {
         base_url: settings.jenkins.url.clone(),
@@ -113,6 +113,10 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
     };
     let project = project.clone();
     for job in &project.jobs {
+        if !hefty_tests && job.hefty {
+            debug!("Skipping hefty test {}", job.title);
+            continue;
+        }
         let mut jenkins_params = Vec::<(&str, &str)>::new();
         for (param_name, param_value) in job.parameters.iter() {
             // TODO(ajd): do this more neatly
@@ -149,7 +153,8 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
     results
 }
 
-fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: &Path) -> Vec<TestResult> {
+fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
+              path: &Path, hefty_tests: bool) -> Vec<TestResult> {
     let repo = project.get_repo().unwrap();
     let mut results: Vec<TestResult> = Vec::new();
     if !path.is_file() {
@@ -235,7 +240,8 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project, path: 
 
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
-            run_tests(&settings_clone, client, &project, &tag, &branch_name)
+            run_tests(&settings_clone, client, &project, &tag, &branch_name,
+            hefty_tests)
         }).unwrap();
         results.append(&mut test.join().unwrap());
 
@@ -317,7 +323,7 @@ fn main() {
         match settings.projects.get(&args.flag_project) {
             None => panic!("Couldn't find project {}", args.flag_project),
             Some(project) => {
-                test_patch(&settings, &client, project, patch);
+                test_patch(&settings, &client, project, patch, true);
             }
         }
 
@@ -336,7 +342,7 @@ fn main() {
                 } else {
                     patchwork.get_patch_mbox(&patch)
                 };
-                test_patch(&settings, &client, project, &mbox);
+                test_patch(&settings, &client, project, &mbox, true);
             }
         }
         return;
@@ -354,7 +360,7 @@ fn main() {
             Some(project) => {
                 let dependencies = patchwork.get_patch_dependencies(&patch);
                 let mbox = patchwork.get_patches_mbox(dependencies);
-                test_patch(&settings, &client, project, &mbox);
+                test_patch(&settings, &client, project, &mbox, true);
             }
         }
         return;
@@ -401,6 +407,7 @@ fn main() {
                 },
                 Some(project) => {
                     // TODO(ajd): Refactor this.
+                    let hefty_tests;
                     let mbox = if patch.has_series() {
                         debug!("Patch {} has a series at {}!", &patch.name, &patch.series[0].url);
                         let series = patchwork.get_series_by_url(&patch.series[0].url);
@@ -411,19 +418,22 @@ fn main() {
                                     continue;
                                 }
                                 let dependencies = patchwork.get_patch_dependencies(&patch);
+                                hefty_tests = dependencies.len() == series.patches.len();
                                 patchwork.get_patches_mbox(dependencies)
 
                             },
                             Err(e) => {
                                 debug!("Series is not OK: {}", e);
+                                hefty_tests = true;
                                 patchwork.get_patch_mbox(&patch)
                             }
                         }
                     } else {
+                        hefty_tests = true;
                         patchwork.get_patch_mbox(&patch)
                     };
 
-                    let results = test_patch(&settings, &client, project, &mbox);
+                    let results = test_patch(&settings, &client, project, &mbox, hefty_tests);
 
                     // Delete the temporary directory with the patch in it
                     fs::remove_dir_all(mbox.parent().unwrap()).unwrap_or_else(

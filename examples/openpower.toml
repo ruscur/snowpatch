@@ -67,6 +67,7 @@ token = "33333333333333333333333333333333"
         remote = "GIT_REPO"
         branch = "GIT_REF"
         artifact = "snowpatch.txt"
+        hefty = true
         DEFCONFIG_TO_USE = "pseries_le_defconfig"
 
         [[projects.linuxppc-dev.jobs]]
@@ -74,4 +75,5 @@ token = "33333333333333333333333333333333"
         remote = "GIT_REPO"
         branch = "GIT_REF"
         artifact = "snowpatch.txt"
+        hefty = false
         DEFCONFIG_TO_USE = "ppc64le_defconfig"
