@@ -46,8 +46,8 @@ use docopt::Docopt;
 
 use url::Url;
 
-use log::LogLevelFilter;
-use env_logger::LogBuilder;
+use log::LevelFilter;
+use env_logger::Builder;
 
 use std::fs;
 use std::string::String;
@@ -262,13 +262,13 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
 
 #[cfg_attr(feature="cargo-clippy", allow(cyclomatic_complexity))]
 fn main() {
-    let mut log_builder = LogBuilder::new();
+    let mut log_builder = Builder::new();
     // By default, log at the "info" level for every module
-    log_builder.filter(None, LogLevelFilter::Info);
-    if env::var("RUST_LOG").is_ok() {
-        log_builder.parse(&env::var("RUST_LOG").unwrap());
+    log_builder.filter(None, LevelFilter::Info);
+    if let Ok(log_env) = env::var("RUST_LOG") {
+        log_builder.parse(&log_env);
     }
-    log_builder.init().unwrap();
+    log_builder.init();
 
     let version = format!("{} version {}",
         env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
