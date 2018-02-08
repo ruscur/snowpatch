@@ -21,7 +21,6 @@
 
 extern crate hyper;
 extern crate hyper_openssl;
-extern crate rustc_serialize;
 extern crate git2;
 extern crate tempdir;
 extern crate docopt;
@@ -92,7 +91,7 @@ Options:
   -h, --help                Output this help text.
 ";
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize)]
 struct Args {
     arg_config_file: String,
     flag_count: u16,
@@ -275,7 +274,7 @@ fn main() {
         env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.version(Some(version)).decode())
+        .and_then(|d| d.version(Some(version)).deserialize())
         .unwrap_or_else(|e| e.exit());
 
     let settings = settings::parse(&args.arg_config_file);
