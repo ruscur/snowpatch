@@ -165,7 +165,6 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
     let tag = utils::sanitise_path(
         path.file_name().unwrap().to_str().unwrap().to_string());
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
-    let commit = git::get_latest_commit(&repo);
 
     let mut push_callbacks = RemoteCallbacks::new();
     push_callbacks.credentials(|_, _, _| {
@@ -186,6 +185,7 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
         git::pull(&repo).unwrap();
 
         debug!("Creating a new branch...");
+        let commit = git::get_latest_commit(&repo);
         let mut branch = repo.branch(&tag, &commit, true).unwrap();
         debug!("Switching to branch...");
         repo.set_head(branch.get().name().unwrap())
