@@ -28,9 +28,6 @@ license = "GPL-2.0+"
 keywords = ["CI", "continuous integration", "patch", "patchwork", "jenkins",
 	    "git"]
 
-[[bin]]
-name = "snowpatch"
-
 [dependencies]
 hyper = "0.10"
 hyper-openssl = "0.2"
