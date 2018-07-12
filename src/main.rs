@@ -19,11 +19,11 @@
 // Equivalent of -Werror
 #![deny(warnings)]
 
+extern crate docopt;
+extern crate git2;
 extern crate hyper;
 extern crate hyper_openssl;
-extern crate git2;
 extern crate tempdir;
-extern crate docopt;
 extern crate url;
 #[macro_use]
 extern crate log;
@@ -34,34 +34,34 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate toml;
 
-use git2::{BranchType, RemoteCallbacks, PushOptions};
+use git2::{BranchType, PushOptions, RemoteCallbacks};
 
-use hyper::Client;
 use hyper::client::ProxyConfig;
-use hyper::net::HttpsConnector;
-use hyper_openssl::OpensslClient;
 use hyper::client::RedirectPolicy;
+use hyper::net::HttpsConnector;
+use hyper::Client;
+use hyper_openssl::OpensslClient;
 
 use docopt::Docopt;
 
 use url::Url;
 
-use log::LevelFilter;
 use env_logger::Builder;
+use log::LevelFilter;
 
+use std::env;
 use std::fs;
+use std::path::Path;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::path::Path;
-use std::env;
 
 mod patchwork;
-use patchwork::{PatchworkServer, TestState, TestResult};
+use patchwork::{PatchworkServer, TestResult, TestState};
 
 mod jenkins;
-use jenkins::{JenkinsBackend, CIBackend};
+use jenkins::{CIBackend, JenkinsBackend};
 
 mod settings;
 use settings::{Config, Project};
@@ -101,8 +101,14 @@ struct Args {
     flag_project: String,
 }
 
-fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &str,
-             branch_name: &str, hefty_tests: bool) -> Vec<TestResult> {
+fn run_tests(
+    settings: &Config,
+    client: Arc<Client>,
+    project: &Project,
+    tag: &str,
+    branch_name: &str,
+    hefty_tests: bool,
+) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
     let jenkins = JenkinsBackend {
         base_url: settings.jenkins.url.clone(),
@@ -126,7 +132,8 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
         jenkins_params.push((&job.branch, tag));
 
         info!("Starting job: {}", &job.title);
-        let res = jenkins.start_test(&job.job, jenkins_params)
+        let res = jenkins
+            .start_test(&job.job, jenkins_params)
             .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
         debug!("{:?}", &res);
         let build_url_real;
@@ -145,8 +152,9 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
             test_result = TestState::Warning;
         }
         results.push(TestResult {
-            description: Some(format!("Test {} on branch {}", job.title,
-                                      branch_name.to_string()).to_string()),
+            description: Some(
+                format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
+            ),
             state: test_result,
             context: Some(format!("{}-{}", "snowpatch", job.title.replace("/", "_")).to_string()),
             target_url: Some(jenkins.get_results_url(&build_url_real, &job.parameters)),
@@ -155,21 +163,23 @@ fn run_tests(settings: &Config, client: Arc<Client>, project: &Project, tag: &st
     results
 }
 
-fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
-              path: &Path, hefty_tests: bool) -> Vec<TestResult> {
+fn test_patch(
+    settings: &Config,
+    client: &Arc<Client>,
+    project: &Project,
+    path: &Path,
+    hefty_tests: bool,
+) -> Vec<TestResult> {
     let repo = project.get_repo().unwrap();
     let mut results: Vec<TestResult> = Vec::new();
     if !path.is_file() {
         return results;
     }
-    let tag = utils::sanitise_path(
-        path.file_name().unwrap().to_str().unwrap().to_string());
+    let tag = utils::sanitise_path(path.file_name().unwrap().to_str().unwrap().to_string());
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
 
     let mut push_callbacks = RemoteCallbacks::new();
-    push_callbacks.credentials(|_, _, _| {
-        git::cred_from_settings(&settings.git)
-    });
+    push_callbacks.credentials(|_, _, _| git::cred_from_settings(&settings.git));
 
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(push_callbacks);
@@ -192,7 +202,10 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
             .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
         repo.checkout_head(None)
             .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
-        debug!("Repo is now at head {}", repo.head().unwrap().name().unwrap());
+        debug!(
+            "Repo is now at head {}",
+            repo.head().unwrap().name().unwrap()
+        );
 
         let output = git::apply_patch(&repo, path);
 
@@ -211,24 +224,30 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
                 successfully_applied = true;
                 results.push(TestResult {
                     state: TestState::Success,
-                    description: Some(format!("{}/{}\n\n{}",
-                                              branch_name.to_string(),
-                                              "apply_patch".to_string(),
-                                              "Successfully applied".to_string())
-                                      .to_string()),
-                    .. Default::default()
+                    description: Some(
+                        format!(
+                            "{}/{}\n\n{}",
+                            branch_name.to_string(),
+                            "apply_patch".to_string(),
+                            "Successfully applied".to_string()
+                        ).to_string(),
+                    ),
+                    ..Default::default()
                 });
-            },
+            }
             Err(_) => {
                 // It didn't apply.  No need to bother testing.
                 results.push(TestResult {
                     state: TestState::Warning,
-                    description: Some(format!("{}/{}\n\n{}",
-                                              branch_name.to_string(),
-                                              "apply_patch".to_string(),
-                                              "Patch failed to apply".to_string())
-                                      .to_string()),
-                    .. Default::default()
+                    description: Some(
+                        format!(
+                            "{}/{}\n\n{}",
+                            branch_name.to_string(),
+                            "apply_patch".to_string(),
+                            "Patch failed to apply".to_string()
+                        ).to_string(),
+                    ),
+                    ..Default::default()
                 });
                 continue;
             }
@@ -241,26 +260,37 @@ fn test_patch(settings: &Config, client: &Arc<Client>, project: &Project,
         let test_all_branches = project.test_all_branches.unwrap_or(true);
 
         // We've set up a remote branch, time to kick off tests
-        let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
-            run_tests(&settings_clone, client, &project, &tag, &branch_name,
-            hefty_tests)
-        }).unwrap();
+        let test = thread::Builder::new()
+            .name(tag.to_string())
+            .spawn(move || {
+                run_tests(
+                    &settings_clone,
+                    client,
+                    &project,
+                    &tag,
+                    &branch_name,
+                    hefty_tests,
+                )
+            })
+            .unwrap();
         results.append(&mut test.join().unwrap());
 
-        if !test_all_branches { break; }
+        if !test_all_branches {
+            break;
+        }
     }
 
     if !successfully_applied {
         results.push(TestResult {
             state: TestState::Fail,
             description: Some("Failed to apply to any branch".to_string()),
-            .. Default::default()
+            ..Default::default()
         });
     }
     results
 }
 
-#[cfg_attr(feature="cargo-clippy", allow(cyclomatic_complexity))]
+#[cfg_attr(feature = "cargo-clippy", allow(cyclomatic_complexity))]
 fn main() {
     let mut log_builder = Builder::new();
     // By default, log at the "info" level for every module
@@ -270,8 +300,11 @@ fn main() {
     }
     log_builder.init();
 
-    let version = format!("{} version {}",
-        env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+    let version = format!(
+        "{} version {}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
 
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.version(Some(version)).deserialize())
@@ -293,14 +326,17 @@ fn main() {
             assert_eq!(proxy.scheme(), "http");
             // This should pass even if no trailing slash is in http_proxy
             assert_eq!(proxy.path(), "/");
-            let proxy_config = ProxyConfig::new(proxy.scheme(),
-                                                proxy.host_str().unwrap().to_string(),
-                                                proxy.port().unwrap_or(80),
-                                                connector, ssl);
+            let proxy_config = ProxyConfig::new(
+                proxy.scheme(),
+                proxy.host_str().unwrap().to_string(),
+                proxy.port().unwrap_or(80),
+                connector,
+                ssl,
+            );
             let mut c = Client::with_proxy_config(proxy_config);
             c.set_redirect_policy(RedirectPolicy::FollowAll);
             c
-        },
+        }
         _ => {
             debug!("snowpatch starting without a HTTP proxy");
             let mut c = Client::with_connector(connector);
@@ -310,9 +346,11 @@ fn main() {
     });
 
     let mut patchwork = PatchworkServer::new(&settings.patchwork.url, &client);
-    patchwork.set_authentication(&settings.patchwork.user,
-                                 &settings.patchwork.pass,
-                                 &settings.patchwork.token);
+    patchwork.set_authentication(
+        &settings.patchwork.user,
+        &settings.patchwork.pass,
+        &settings.patchwork.token,
+    );
     let patchwork = patchwork;
 
     if args.flag_series > 0 && args.flag_patch > 0 {
@@ -354,7 +392,9 @@ fn main() {
         info!("snowpatch is testing a series from Patchwork.");
         let series = patchwork.get_series(&(args.flag_series as u64)).unwrap();
         // The last patch in the series, so its dependencies are the whole series
-        let patch = patchwork.get_patch_by_url(&series.patches.last().unwrap().url).unwrap();
+        let patch = patchwork
+            .get_patch_by_url(&series.patches.last().unwrap().url)
+            .unwrap();
         // We have to do it this way since there's no project field on Series
         let project = patchwork.get_project(&patch.project.name).unwrap();
         match settings.projects.get(&project.link_name) {
@@ -378,8 +418,9 @@ fn main() {
      * Spawn tests.
      */
     'daemon: loop {
-        let patch_list = patchwork.get_patch_query().unwrap_or_else(
-            |err| panic!("Failed to obtain patch list: {}", err));
+        let patch_list = patchwork
+            .get_patch_query()
+            .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err));
         info!("snowpatch is ready to test new revisions from Patchwork.");
         for patch in patch_list {
             // If it's already been tested, we can skip it
@@ -396,22 +437,29 @@ fn main() {
             //let project = patchwork.get_project(&patch.project).unwrap();
             // Skip if we're using -p and it's the wrong project
             if args.flag_project != "" && patch.project.link_name != args.flag_project {
-                debug!("Skipping patch {} ({}) (wrong project: {})",
-                       patch.name, patch.id, patch.project.link_name);
+                debug!(
+                    "Skipping patch {} ({}) (wrong project: {})",
+                    patch.name, patch.id, patch.project.link_name
+                );
                 continue;
             }
 
             match settings.projects.get(&patch.project.link_name) {
                 None => {
-                    debug!("Project {} not configured for patch {}",
-                           &patch.project.link_name, patch.name);
+                    debug!(
+                        "Project {} not configured for patch {}",
+                        &patch.project.link_name, patch.name
+                    );
                     continue;
-                },
+                }
                 Some(project) => {
                     // TODO(ajd): Refactor this.
                     let hefty_tests;
                     let mbox = if patch.has_series() {
-                        debug!("Patch {} has a series at {}!", &patch.name, &patch.series[0].url);
+                        debug!(
+                            "Patch {} has a series at {}!",
+                            &patch.name, &patch.series[0].url
+                        );
                         let series = patchwork.get_series_by_url(&patch.series[0].url);
                         match series {
                             Ok(series) => {
@@ -422,8 +470,7 @@ fn main() {
                                 let dependencies = patchwork.get_patch_dependencies(&patch);
                                 hefty_tests = dependencies.len() == series.patches.len();
                                 patchwork.get_patches_mbox(dependencies)
-
-                            },
+                            }
                             Err(e) => {
                                 debug!("Series is not OK: {}", e);
                                 hefty_tests = true;
@@ -438,8 +485,8 @@ fn main() {
                     let results = test_patch(&settings, &client, project, &mbox, hefty_tests);
 
                     // Delete the temporary directory with the patch in it
-                    fs::remove_dir_all(mbox.parent().unwrap()).unwrap_or_else(
-                        |err| error!("Couldn't delete temp directory: {}", err));
+                    fs::remove_dir_all(mbox.parent().unwrap())
+                        .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
                     if project.push_results {
                         for result in results {
                             patchwork.post_test_result(result, &patch.checks).unwrap();
@@ -447,8 +494,7 @@ fn main() {
                     }
                     if args.flag_count > 0 {
                         patch_count += 1;
-                        debug!("Tested {} patches out of {}",
-                               patch_count, args.flag_count);
+                        debug!("Tested {} patches out of {}", patch_count, args.flag_count);
                         if patch_count >= args.flag_count {
                             break 'daemon;
                         }

@@ -16,14 +16,14 @@
 
 use toml;
 
-use serde::de::{self, Visitor, Deserializer, Deserialize, MapAccess};
+use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 
-use git2::{Repository, Error};
+use git2::{Error, Repository};
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
-use std::collections::BTreeMap;
 
 // TODO: Give more informative error messages when we fail to parse.
 
@@ -32,7 +32,7 @@ pub struct Git {
     pub user: String,
     pub public_key: Option<String>,
     pub private_key: String,
-    pub passphrase: Option<String>
+    pub passphrase: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -53,7 +53,7 @@ pub struct Jenkins {
     pub port: Option<u16>,
     // TODO: fail if we only get one of username or token
     pub username: Option<String>,
-    pub token: Option<String>
+    pub token: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -87,7 +87,8 @@ pub struct Job {
 
 impl<'de> Deserialize<'de> for Job {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         struct JobVisitor;
 
@@ -99,7 +100,8 @@ impl<'de> Deserialize<'de> for Job {
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Job, A::Error>
-                where A: MapAccess<'de>
+            where
+                A: MapAccess<'de>,
             {
                 let mut job = None;
                 let mut title = None;
@@ -180,7 +182,7 @@ pub struct Config {
     pub git: Git,
     pub patchwork: Patchwork,
     pub jenkins: Jenkins,
-    pub projects: BTreeMap<String, Project>
+    pub projects: BTreeMap<String, Project>,
 }
 
 pub fn parse(path: &str) -> Config {
@@ -188,7 +190,7 @@ pub fn parse(path: &str) -> Config {
 
     let mut file = match File::open(&path) {
         Ok(file) => file,
-        Err(_) => panic!("Couldn't open config file, exiting.")
+        Err(_) => panic!("Couldn't open config file, exiting."),
     };
 
     file.read_to_string(&mut toml_config)

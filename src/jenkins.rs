@@ -23,15 +23,15 @@
 extern crate hyper;
 extern crate url;
 
-use std::io::Read;
-use std::time::Duration;
-use std::thread::sleep;
-use std::sync::Arc;
 use std::collections::BTreeMap;
+use std::io::Read;
+use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
 
-use hyper::Client;
 use hyper::client::{IntoUrl, RequestBuilder};
-use hyper::header::{Headers, Basic, Authorization, Location};
+use hyper::header::{Authorization, Basic, Headers, Location};
+use hyper::Client;
 use serde_json::{self, Value};
 
 use patchwork::TestState;
@@ -41,8 +41,10 @@ const JENKINS_POLLING_INTERVAL: u64 = 5000; // Polling interval in milliseconds
 
 // Jenkins API definitions
 
-pub trait CIBackend { // TODO: Separate out
-    fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>) -> Result<String, &'static str>;
+pub trait CIBackend {
+    // TODO: Separate out
+    fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>)
+        -> Result<String, &'static str>;
 }
 
 pub struct JenkinsBackend {
@@ -58,15 +60,20 @@ impl CIBackend for JenkinsBackend {
     /// # Failures
     ///
     /// Returns Err when HTTP request fails or when no Location: header is returned
-    fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>)
-                  -> Result<String, &'static str> {
+    fn start_test(
+        &self,
+        job_name: &str,
+        params: Vec<(&str, &str)>,
+    ) -> Result<String, &'static str> {
         let params = url::form_urlencoded::Serializer::new(String::new())
             .extend_pairs(params)
             .finish();
 
-        let res = self.post(&format!("{}/job/{}/buildWithParameters?{}",
-                                     self.base_url, job_name, params))
-            .send().expect("HTTP request error"); // TODO don't panic here
+        let res = self.post(&format!(
+            "{}/job/{}/buildWithParameters?{}",
+            self.base_url, job_name, params
+        )).send()
+            .expect("HTTP request error"); // TODO don't panic here
 
         match res.headers.get::<Location>() {
             Some(loc) => Ok(loc.to_string()),
@@ -85,14 +92,10 @@ impl JenkinsBackend {
     fn headers(&self) -> Headers {
         let mut headers = Headers::new();
         if let Some(ref username) = self.username {
-            headers.set(
-                Authorization(
-                    Basic {
-                        username: username.clone(),
-                        password: self.token.clone(),
-                    }
-                )
-            );
+            headers.set(Authorization(Basic {
+                username: username.clone(),
+                password: self.token.clone(),
+            }));
         }
         headers
     }
@@ -119,31 +122,37 @@ impl JenkinsBackend {
             resp.read_to_string(&mut result_str)
                 .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
             break;
-       }
-        serde_json::from_str(&result_str).unwrap_or_else(
-            |err| panic!("Couldn't parse JSON from Jenkins: {}", err)
-        )
+        }
+        serde_json::from_str(&result_str)
+            .unwrap_or_else(|err| panic!("Couldn't parse JSON from Jenkins: {}", err))
     }
 
     pub fn get_build_url(&self, build_queue_entry: &str) -> Option<String> {
         loop {
             let entry = self.get_api_json_object(build_queue_entry);
             match entry.get("executable") {
-                Some(exec) => return Some(exec
+                Some(exec) => {
+                    return Some(
+                        exec
                                           .as_object() // Option<BTreeMap>
                                           .unwrap() // BTreeMap
                                           .get("url") // Option<&str>
                                           .unwrap() // &str ?
                                           .as_str()
                                           .unwrap()
-                                          .to_string()),
+                                          .to_string(),
+                    );
+                }
                 None => sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL)),
             }
         }
     }
 
     pub fn get_build_status(&self, build_url: &str) -> JenkinsBuildStatus {
-        if self.get_api_json_object(build_url)["building"].as_bool().unwrap() {
+        if self.get_api_json_object(build_url)["building"]
+            .as_bool()
+            .unwrap()
+        {
             JenkinsBuildStatus::Running
         } else {
             JenkinsBuildStatus::Done
@@ -151,10 +160,14 @@ impl JenkinsBackend {
     }
 
     pub fn get_build_result(&self, build_url: &str) -> Option<TestState> {
-        match self.get_api_json_object(build_url).get("result").unwrap()
-            .as_str() {
+        match self.get_api_json_object(build_url)
+            .get("result")
+            .unwrap()
+            .as_str()
+        {
             None => None,
-            Some(result) => match result { // TODO: Improve this...
+            Some(result) => match result {
+                // TODO: Improve this...
                 "SUCCESS" => Some(TestState::Success),
                 "FAILURE" => Some(TestState::Fail),
                 "UNSTABLE" => Some(TestState::Warning),
@@ -166,7 +179,7 @@ impl JenkinsBackend {
     pub fn get_results_url(&self, build_url: &str, job: &BTreeMap<String, String>) -> String {
         match job.get("artifact") {
             Some(artifact) => format!("{}/artifact/{}", build_url, artifact),
-            None => format!("{}/consoleText/", build_url)
+            None => format!("{}/consoleText/", build_url),
         }
     }
 

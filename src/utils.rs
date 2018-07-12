@@ -14,9 +14,18 @@
 //
 
 pub fn sanitise_path(path: String) -> String {
-    path.replace("/", "_").replace("\\", "_").replace(".", "_")
-        .replace("~", "_").replace(" ", "_").replace(":", "")
-        .replace("[", "_").replace("]", "_").replace("'", "")
-        .replace("\"", "").replace("(", "_").replace(")", "_")
-        .replace("*", "_").replace("?", "_")
+    path.replace("/", "_")
+        .replace("\\", "_")
+        .replace(".", "_")
+        .replace("~", "_")
+        .replace(" ", "_")
+        .replace(":", "")
+        .replace("[", "_")
+        .replace("]", "_")
+        .replace("'", "")
+        .replace("\"", "")
+        .replace("(", "_")
+        .replace(")", "_")
+        .replace("*", "_")
+        .replace("?", "_")
 }

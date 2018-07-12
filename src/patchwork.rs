@@ -15,22 +15,21 @@
 //
 
 use std;
-use std::io::{self};
+use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::io;
 use std::option::Option;
 use std::path::PathBuf;
-use std::fs::{File, OpenOptions};
 use std::result::Result;
-use std::collections::BTreeMap;
 
 use tempdir::TempDir;
 
 use hyper;
-use hyper::Client;
-use hyper::header::{Connection, Headers, Accept, ContentType, qitem,
-                    Authorization, Basic};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
-use hyper::status::StatusCode;
 use hyper::client::response::Response;
+use hyper::header::{qitem, Accept, Authorization, Basic, Connection, ContentType, Headers};
+use hyper::mime::{Attr, Mime, SubLevel, TopLevel, Value};
+use hyper::status::StatusCode;
+use hyper::Client;
 
 use serde::{self, Serializer};
 use serde_json;
@@ -46,7 +45,7 @@ pub struct SubmitterSummary {
     pub id: u64,
     pub url: String,
     pub name: String,
-    pub email: String
+    pub email: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -55,7 +54,7 @@ pub struct DelegateSummary {
     pub url: String,
     pub first_name: String,
     pub last_name: String,
-    pub email: String
+    pub email: String,
 }
 
 // /api/1.0/projects/{id}
@@ -94,7 +93,7 @@ pub struct Patch {
     pub series: Vec<SeriesSummary>,
     pub check: String, // TODO enum of possible states
     pub checks: String,
-    pub tags: BTreeMap<String, u64>
+    pub tags: BTreeMap<String, u64>,
 }
 
 impl Patch {
@@ -114,7 +113,7 @@ pub struct PatchSummary {
     pub mbox: String,
     pub msgid: String,
     pub name: String,
-    pub url: String
+    pub url: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -123,7 +122,7 @@ pub struct CoverLetter {
     pub id: u64,
     pub msgid: String,
     pub name: String,
-    pub url: String
+    pub url: String,
 }
 
 // /api/1.0/series/
@@ -142,7 +141,7 @@ pub struct Series {
     pub submitter: SubmitterSummary,
     pub total: u64,
     pub url: String,
-    pub version: u64
+    pub version: u64,
 }
 
 #[derive(Deserialize, Clone)]
@@ -184,15 +183,19 @@ pub struct TestResult {
 }
 
 impl TestResult {
-    fn serialize_context<S>(context: &Option<String>, ser: S)
-                            -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize_context<S>(context: &Option<String>, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         if context.is_none() {
             serde::Serialize::serialize(
-                &Some(format!("{}-{}",
-                              env!("CARGO_PKG_NAME"),
-                              env!("CARGO_PKG_VERSION")).to_string()
-                      .replace(".", "_")),
-                ser)
+                &Some(
+                    format!("{}-{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+                        .to_string()
+                        .replace(".", "_"),
+                ),
+                ser,
+            )
         } else {
             serde::Serialize::serialize(context, ser)
         }
@@ -206,17 +209,19 @@ pub struct PatchworkServer {
 }
 
 impl PatchworkServer {
-    #[cfg_attr(feature="cargo-clippy", allow(ptr_arg))]
+    #[cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
     pub fn new(url: &String, client: &std::sync::Arc<Client>) -> PatchworkServer {
         let mut headers = Headers::new();
-        headers.set(Accept(vec![qitem(Mime(TopLevel::Application,
-                                           SubLevel::Json,
-                                           vec![(Attr::Charset, Value::Utf8)]))])
-        );
-        headers.set(ContentType(Mime(TopLevel::Application,
-                                     SubLevel::Json,
-                                     vec![(Attr::Charset, Value::Utf8)]))
-        );
+        headers.set(Accept(vec![qitem(Mime(
+            TopLevel::Application,
+            SubLevel::Json,
+            vec![(Attr::Charset, Value::Utf8)],
+        ))]));
+        headers.set(ContentType(Mime(
+            TopLevel::Application,
+            SubLevel::Json,
+            vec![(Attr::Charset, Value::Utf8)],
+        )));
         PatchworkServer {
             url: url.clone(),
             client: client.clone(),
@@ -224,46 +229,63 @@ impl PatchworkServer {
         }
     }
 
-    #[cfg_attr(feature="cargo-clippy", allow(ptr_arg))]
-    pub fn set_authentication(&mut self, username: &Option<String>,
-                              password: &Option<String>,
-                              token: &Option<String>) {
+    #[cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
+    pub fn set_authentication(
+        &mut self,
+        username: &Option<String>,
+        password: &Option<String>,
+        token: &Option<String>,
+    ) {
         match (username, password, token) {
             (&None, &None, &Some(ref token)) => {
-                self.headers.set(Authorization(
-                    format!("Token {}", token)));
-            },
+                self.headers.set(Authorization(format!("Token {}", token)));
+            }
             (&Some(ref username), &Some(ref password), &None) => {
                 self.headers.set(Authorization(Basic {
                     username: username.clone(),
                     password: Some(password.clone()),
                 }));
-            },
+            }
             _ => panic!("Invalid patchwork authentication details"),
         }
     }
 
-    pub fn get_url(&self, url: &str)
-                   -> std::result::Result<Response, hyper::error::Error> {
-        self.client.get(&*url).headers(self.headers.clone())
-            .header(Connection::close()).send()
+    pub fn get_url(&self, url: &str) -> std::result::Result<Response, hyper::error::Error> {
+        self.client
+            .get(&*url)
+            .headers(self.headers.clone())
+            .header(Connection::close())
+            .send()
     }
 
     pub fn get_url_string(&self, url: &str) -> std::result::Result<String, hyper::error::Error> {
-        let mut resp = try!(self.client.get(&*url).headers(self.headers.clone())
-                            .header(Connection::close()).send());
+        let mut resp = try!(
+            self.client
+                .get(&*url)
+                .headers(self.headers.clone())
+                .header(Connection::close())
+                .send()
+        );
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         Ok(String::from_utf8(body).unwrap())
     }
 
-    pub fn post_test_result(&self, result: TestResult, checks_url: &str)
-                            -> Result<StatusCode, hyper::error::Error> {
+    pub fn post_test_result(
+        &self,
+        result: TestResult,
+        checks_url: &str,
+    ) -> Result<StatusCode, hyper::error::Error> {
         let encoded = serde_json::to_string(&result).unwrap();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
-        let mut resp = try!(self.client.post(checks_url)
-                        .headers(headers).body(&encoded).send());
+        let mut resp = try!(
+            self.client
+                .post(checks_url)
+                .headers(headers)
+                .body(&encoded)
+                .send()
+        );
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         trace!("{}", String::from_utf8(body).unwrap());
@@ -276,8 +298,10 @@ impl PatchworkServer {
     }
 
     pub fn get_patch(&self, patch_id: &u64) -> Result<Patch, serde_json::Error> {
-        let url = format!("{}{}/patches/{}{}", &self.url, PATCHWORK_API,
-                          patch_id, PATCHWORK_QUERY);
+        let url = format!(
+            "{}{}/patches/{}{}",
+            &self.url, PATCHWORK_API, patch_id, PATCHWORK_QUERY
+        );
         serde_json::from_str(&self.get_url_string(&url).unwrap())
     }
 
@@ -287,13 +311,13 @@ impl PatchworkServer {
 
     pub fn get_patch_query(&self) -> Result<Vec<Patch>, serde_json::Error> {
         let url = format!("{}{}/patches/{}", &self.url, PATCHWORK_API, PATCHWORK_QUERY);
-        serde_json::from_str(&self.get_url_string(&url).unwrap_or_else(
-            |err| panic!("Failed to connect to Patchwork: {}", err)))
+        serde_json::from_str(&self.get_url_string(&url)
+            .unwrap_or_else(|err| panic!("Failed to connect to Patchwork: {}", err)))
     }
 
     pub fn get_patch_dependencies(&self, patch: &Patch) -> Vec<Patch> {
         // We assume the list of patches in a series are in order.
-        let mut dependencies: Vec<Patch> = vec!();
+        let mut dependencies: Vec<Patch> = vec![];
         let series = self.get_series_by_url(&patch.series[0].url);
         if series.is_err() {
             return dependencies;
@@ -316,10 +340,10 @@ impl PatchworkServer {
         let mut mbox_resp = self.get_url(&patch.mbox).unwrap();
 
         debug!("Saving patch to file {}", path.display());
-        let mut mbox = File::create(&path).unwrap_or_else(
-            |err| panic!("Couldn't create mbox file: {}", err));
-        io::copy(&mut mbox_resp, &mut mbox).unwrap_or_else(
-            |err| panic!("Couldn't save mbox from Patchwork: {}", err));
+        let mut mbox =
+            File::create(&path).unwrap_or_else(|err| panic!("Couldn't create mbox file: {}", err));
+        io::copy(&mut mbox_resp, &mut mbox)
+            .unwrap_or_else(|err| panic!("Couldn't save mbox from Patchwork: {}", err));
         path
     }
 
@@ -339,20 +363,21 @@ impl PatchworkServer {
         for patch in patches {
             let mut mbox_resp = self.get_url(&patch.mbox).unwrap();
             debug!("Appending patch {} to file {}", patch.name, path.display());
-            io::copy(&mut mbox_resp, &mut mbox).unwrap_or_else(
-                |err| panic!("Couldn't save mbox from Patchwork: {}", err));
+            io::copy(&mut mbox_resp, &mut mbox)
+                .unwrap_or_else(|err| panic!("Couldn't save mbox from Patchwork: {}", err));
         }
         path
     }
 
     pub fn get_series(&self, series_id: &u64) -> Result<Series, serde_json::Error> {
-        let url = format!("{}{}/series/{}{}", &self.url, PATCHWORK_API,
-                          series_id, PATCHWORK_QUERY);
+        let url = format!(
+            "{}{}/series/{}{}",
+            &self.url, PATCHWORK_API, series_id, PATCHWORK_QUERY
+        );
         serde_json::from_str(&self.get_url_string(&url).unwrap())
     }
 
     pub fn get_series_by_url(&self, url: &str) -> Result<Series, serde_json::Error> {
         serde_json::from_str(&self.get_url_string(url).unwrap())
     }
-
 }

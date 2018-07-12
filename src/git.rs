@@ -14,12 +14,12 @@
 // git.rs - snowpatch git functionality
 //
 
-use git2::{Repository, Commit, Remote, Error, PushOptions, Cred};
 use git2::build::CheckoutBuilder;
+use git2::{Commit, Cred, Error, PushOptions, Remote, Repository};
 
-use std::result::Result;
 use std::path::Path;
 use std::process::{Command, Output};
+use std::result::Result;
 
 use settings::Git;
 
@@ -31,9 +31,11 @@ pub fn get_latest_commit(repo: &Repository) -> Commit {
     repo.find_commit(oid).unwrap()
 }
 
-pub fn push_to_remote(remote: &mut Remote, branch: &str,
-                      mut opts: &mut PushOptions)
-                      -> Result<(), Error> {
+pub fn push_to_remote(
+    remote: &mut Remote,
+    branch: &str,
+    mut opts: &mut PushOptions,
+) -> Result<(), Error> {
     let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, branch)];
     remote.push(refspecs, Some(&mut opts))
 }
@@ -49,12 +51,14 @@ pub fn pull(repo: &Repository) -> Result<Output, &'static str> {
         .unwrap(); // TODO
 
     if output.status.success() {
-        debug!("Pull: {}", String::from_utf8(output.clone().stdout).unwrap());
+        debug!(
+            "Pull: {}",
+            String::from_utf8(output.clone().stdout).unwrap()
+        );
         Ok(output)
     } else {
         Err("Error: couldn't pull changes")
     }
-
 }
 
 pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
@@ -99,8 +103,7 @@ pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
     ()
 }
 
-pub fn apply_patch(repo: &Repository, path: &Path)
-                   -> Result<Output, &'static str> {
+pub fn apply_patch(repo: &Repository, path: &Path) -> Result<Output, &'static str> {
     let workdir = repo.workdir().unwrap(); // TODO: support bare repositories
 
     // We call out to "git am" since libgit2 doesn't implement "am"
@@ -113,15 +116,23 @@ pub fn apply_patch(repo: &Repository, path: &Path)
         .unwrap(); // TODO
 
     if output.status.success() {
-        debug!("Patch applied with text {}",
-                 String::from_utf8(output.clone().stdout).unwrap());
+        debug!(
+            "Patch applied with text {}",
+            String::from_utf8(output.clone().stdout).unwrap()
+        );
         Ok(output)
     } else {
-        info!("Patch failed to apply with text {} {}",
-              String::from_utf8(output.clone().stdout).unwrap(),
-              String::from_utf8(output.clone().stderr).unwrap());
-        Command::new("git").arg("am").arg("--abort")
-            .current_dir(&workdir).output().unwrap();
+        info!(
+            "Patch failed to apply with text {} {}",
+            String::from_utf8(output.clone().stdout).unwrap(),
+            String::from_utf8(output.clone().stderr).unwrap()
+        );
+        Command::new("git")
+            .arg("am")
+            .arg("--abort")
+            .current_dir(&workdir)
+            .output()
+            .unwrap();
         Err("Patch did not apply successfully")
     }
 }
@@ -131,8 +142,10 @@ pub fn cred_from_settings(settings: &Git) -> Result<Cred, Error> {
     let public_key = settings.public_key.as_ref().map(String::as_ref);
     let passphrase = settings.passphrase.as_ref().map(String::as_ref);
 
-    Cred::ssh_key(&settings.user,
-                  public_key,
-                  Path::new(&settings.private_key),
-                  passphrase)
+    Cred::ssh_key(
+        &settings.user,
+        public_key,
+        Path::new(&settings.private_key),
+        passphrase,
+    )
 }
