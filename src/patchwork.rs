@@ -24,12 +24,11 @@ use std::result::Result;
 
 use tempdir::TempDir;
 
-use hyper;
-use hyper::client::response::Response;
-use hyper::header::{qitem, Accept, Authorization, Basic, Connection, ContentType, Headers};
-use hyper::mime::{Attr, Mime, SubLevel, TopLevel, Value};
-use hyper::status::StatusCode;
-use hyper::Client;
+use reqwest;
+use reqwest::header::{qitem, Accept, Authorization, Basic, Connection, ContentType, Headers};
+use reqwest::Client;
+use reqwest::Response;
+use reqwest::StatusCode;
 
 use serde::{self, Serializer};
 use serde_json;
@@ -204,7 +203,7 @@ impl TestResult {
 
 pub struct PatchworkServer {
     pub url: String,
-    headers: hyper::header::Headers,
+    headers: Headers,
     pub client: std::sync::Arc<Client>,
 }
 
@@ -212,16 +211,8 @@ impl PatchworkServer {
     #[cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
     pub fn new(url: &String, client: &std::sync::Arc<Client>) -> PatchworkServer {
         let mut headers = Headers::new();
-        headers.set(Accept(vec![qitem(Mime(
-            TopLevel::Application,
-            SubLevel::Json,
-            vec![(Attr::Charset, Value::Utf8)],
-        ))]));
-        headers.set(ContentType(Mime(
-            TopLevel::Application,
-            SubLevel::Json,
-            vec![(Attr::Charset, Value::Utf8)],
-        )));
+        headers.set(Accept(vec![qitem(reqwest::mime::APPLICATION_JSON)]));
+        headers.set(ContentType(reqwest::mime::APPLICATION_JSON));
         PatchworkServer {
             url: url.clone(),
             client: client.clone(),
@@ -250,7 +241,7 @@ impl PatchworkServer {
         }
     }
 
-    pub fn get_url(&self, url: &str) -> std::result::Result<Response, hyper::error::Error> {
+    pub fn get_url(&self, url: &str) -> std::result::Result<Response, reqwest::Error> {
         self.client
             .get(&*url)
             .headers(self.headers.clone())
@@ -258,7 +249,7 @@ impl PatchworkServer {
             .send()
     }
 
-    pub fn get_url_string(&self, url: &str) -> std::result::Result<String, hyper::error::Error> {
+    pub fn get_url_string(&self, url: &str) -> std::result::Result<String, reqwest::Error> {
         let mut resp = try!(
             self.client
                 .get(&*url)
@@ -275,7 +266,7 @@ impl PatchworkServer {
         &self,
         result: TestResult,
         checks_url: &str,
-    ) -> Result<StatusCode, hyper::error::Error> {
+    ) -> Result<StatusCode, reqwest::Error> {
         let encoded = serde_json::to_string(&result).unwrap();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
@@ -283,14 +274,14 @@ impl PatchworkServer {
             self.client
                 .post(checks_url)
                 .headers(headers)
-                .body(&encoded)
+                .body(encoded)
                 .send()
         );
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         trace!("{}", String::from_utf8(body).unwrap());
-        assert_eq!(resp.status, hyper::status::StatusCode::Created);
-        Ok(resp.status)
+        assert_eq!(resp.status(), StatusCode::Created);
+        Ok(resp.status())
     }
 
     pub fn get_project(&self, url: &str) -> Result<Project, serde_json::Error> {
