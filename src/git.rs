@@ -15,7 +15,7 @@
 //
 
 use git2::build::CheckoutBuilder;
-use git2::{Commit, Cred, Error, PushOptions, Remote, Repository};
+use git2::{Branch, Commit, Cred, Error, PushOptions, Remote, Repository};
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -33,10 +33,17 @@ pub fn get_latest_commit(repo: &Repository) -> Commit {
 
 pub fn push_to_remote(
     remote: &mut Remote,
-    branch: &str,
+    branch: &Branch,
+    delete: bool,
     mut opts: &mut PushOptions,
 ) -> Result<(), Error> {
-    let refspecs: &[&str] = &[&format!("+{}/{}", GIT_REF_BASE, branch)];
+    let action = if delete { ":" } else { "+" };
+    let refspecs: &[&str] = &[&format!(
+        "{}{}/{}",
+        action,
+        GIT_REF_BASE,
+        branch.name().unwrap().unwrap()
+    )];
     remote.push(refspecs, Some(&mut opts))
 }
 
