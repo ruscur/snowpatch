@@ -184,7 +184,7 @@ impl JenkinsBackend {
     pub fn get_results_url(&self, build_url: &str, job: &BTreeMap<String, String>) -> String {
         match job.get("artifact") {
             Some(artifact) => format!("{}/artifact/{}", build_url, artifact),
-            None => format!("{}/consoleText/", build_url),
+            None => format!("{}/", build_url),
         }
     }
 
