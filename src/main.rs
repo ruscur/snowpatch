@@ -151,7 +151,7 @@ fn run_tests(
                 format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
             ),
             state: test_result,
-            context: Some(format!("{}-{}", "snowpatch", job.title.replace("/", "_")).to_string()),
+            context: Some(format!("{}", job.title.replace("/", "_")).to_string()),
             target_url: Some(jenkins.get_results_url(&build_url_real, &job.parameters)),
         });
     }
@@ -227,6 +227,7 @@ fn test_patch(
                             "Successfully applied".to_string()
                         ).to_string(),
                     ),
+                    context: Some("apply_patch".to_string()),
                     ..Default::default()
                 });
             }
@@ -242,6 +243,7 @@ fn test_patch(
                             "Patch failed to apply".to_string()
                         ).to_string(),
                     ),
+                    context: Some("apply_patch".to_string()),
                     ..Default::default()
                 });
                 continue;
@@ -272,6 +274,7 @@ fn test_patch(
         results.push(TestResult {
             state: TestState::Fail,
             description: Some("Failed to apply to any branch".to_string()),
+            context: Some("apply_patch".to_string()),
             ..Default::default()
         });
     }
