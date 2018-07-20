@@ -205,7 +205,7 @@ fn test_patch(
         let output = git::apply_patch(&repo, path);
 
         if output.is_ok() {
-            git::push_to_remote(&mut remote, &tag, &mut push_opts).unwrap();
+            git::push_to_remote(&mut remote, &branch, false, &mut push_opts).unwrap();
         }
 
         git::checkout_branch(&repo, &branch_name);
@@ -269,6 +269,9 @@ fn test_patch(
             })
             .unwrap();
         results.append(&mut test.join().unwrap());
+
+        // Delete the remote branch now it's not needed any more
+        git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
 
         if !test_all_branches {
             break;
