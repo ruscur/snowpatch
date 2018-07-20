@@ -67,8 +67,8 @@ mod utils;
 
 static USAGE: &'static str = "
 Usage:
-  snowpatch <config-file> [--count=<count>] [--project <name>]
-  snowpatch <config-file> --mbox <mbox> --project <name>
+  snowpatch <config-file> --project <name> [--count=<count>]
+  snowpatch <config-file> --project <name> --mbox <mbox>
   snowpatch <config-file> --patch <id>
   snowpatch <config-file> --series <id>
   snowpatch -v | --version
@@ -77,11 +77,11 @@ Usage:
 By default, snowpatch runs as a long-running daemon.
 
 Options:
+  --project <name>          Test patches for the given project.
   --count <count>           Run tests on <count> recent series.
   --patch <id>              Run tests on the given Patchwork patch.
   --series <id>             Run tests on the given Patchwork series.
   --mbox <mbox>             Run tests on the given mbox file. Requires --project
-  --project <name>          Test patches for the given project.
   -v, --version             Output version information.
   -h, --help                Output this help text.
 ";
@@ -349,19 +349,6 @@ fn main() {
         panic!("Can't specify both --series and --patch");
     }
 
-    if args.flag_mbox != "" && args.flag_project != "" {
-        info!("snowpatch is testing a local patch.");
-        let patch = Path::new(&args.flag_mbox);
-        match settings.projects.get(&args.flag_project) {
-            None => panic!("Couldn't find project {}", args.flag_project),
-            Some(project) => {
-                test_patch(&settings, &client, project, patch, true);
-            }
-        }
-
-        return;
-    }
-
     if args.flag_patch > 0 {
         info!("snowpatch is testing a patch from Patchwork.");
         let patch = patchwork.get_patch(&(args.flag_patch as u64)).unwrap();
@@ -400,6 +387,17 @@ fn main() {
         return;
     }
 
+    // At this point, specifying a project is required
+    let project = settings.projects.get(&args.flag_project).unwrap();
+
+    if args.flag_mbox != "" {
+        info!("snowpatch is testing a local patch.");
+        let patch = Path::new(&args.flag_mbox);
+        test_patch(&settings, &client, project, patch, true);
+
+        return;
+    }
+
     // The number of patches tested so far.  If --count isn't provided, this is unused.
     let mut patch_count = 0;
 
@@ -411,7 +409,7 @@ fn main() {
      */
     'daemon: loop {
         let patch_list = patchwork
-            .get_patch_query()
+            .get_patch_query(&args.flag_project)
             .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err));
         info!("snowpatch is ready to test new revisions from Patchwork.");
         for patch in patch_list {
@@ -426,71 +424,59 @@ fn main() {
                 continue;
             }
 
-            //let project = patchwork.get_project(&patch.project).unwrap();
-            // Skip if we're using -p and it's the wrong project
-            if args.flag_project != "" && patch.project.link_name != args.flag_project {
-                debug!(
+            // Skip if it's the wrong project
+            if patch.project.link_name != args.flag_project {
+                warn!(
                     "Skipping patch {} ({}) (wrong project: {})",
                     patch.name, patch.id, patch.project.link_name
                 );
                 continue;
             }
 
-            match settings.projects.get(&patch.project.link_name) {
-                None => {
-                    debug!(
-                        "Project {} not configured for patch {}",
-                        &patch.project.link_name, patch.name
-                    );
-                    continue;
-                }
-                Some(project) => {
-                    // TODO(ajd): Refactor this.
-                    let hefty_tests;
-                    let mbox = if patch.has_series() {
-                        debug!(
-                            "Patch {} has a series at {}!",
-                            &patch.name, &patch.series[0].url
-                        );
-                        let series = patchwork.get_series_by_url(&patch.series[0].url);
-                        match series {
-                            Ok(series) => {
-                                if !series.received_all {
-                                    debug!("Series is incomplete, skipping patch for now");
-                                    continue;
-                                }
-                                let dependencies = patchwork.get_patch_dependencies(&patch);
-                                hefty_tests = dependencies.len() == series.patches.len();
-                                patchwork.get_patches_mbox(dependencies)
-                            }
-                            Err(e) => {
-                                debug!("Series is not OK: {}", e);
-                                hefty_tests = true;
-                                patchwork.get_patch_mbox(&patch)
-                            }
+            // TODO(ajd): Refactor this.
+            let hefty_tests;
+            let mbox = if patch.has_series() {
+                debug!(
+                    "Patch {} has a series at {}!",
+                    &patch.name, &patch.series[0].url
+                );
+                let series = patchwork.get_series_by_url(&patch.series[0].url);
+                match series {
+                    Ok(series) => {
+                        if !series.received_all {
+                            debug!("Series is incomplete, skipping patch for now");
+                            continue;
                         }
-                    } else {
+                        let dependencies = patchwork.get_patch_dependencies(&patch);
+                        hefty_tests = dependencies.len() == series.patches.len();
+                        patchwork.get_patches_mbox(dependencies)
+                    }
+                    Err(e) => {
+                        debug!("Series is not OK: {}", e);
                         hefty_tests = true;
                         patchwork.get_patch_mbox(&patch)
-                    };
-
-                    let results = test_patch(&settings, &client, project, &mbox, hefty_tests);
-
-                    // Delete the temporary directory with the patch in it
-                    fs::remove_dir_all(mbox.parent().unwrap())
-                        .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
-                    if project.push_results {
-                        for result in results {
-                            patchwork.post_test_result(result, &patch.checks).unwrap();
-                        }
                     }
-                    if args.flag_count > 0 {
-                        patch_count += 1;
-                        debug!("Tested {} patches out of {}", patch_count, args.flag_count);
-                        if patch_count >= args.flag_count {
-                            break 'daemon;
-                        }
-                    }
+                }
+            } else {
+                hefty_tests = true;
+                patchwork.get_patch_mbox(&patch)
+            };
+
+            let results = test_patch(&settings, &client, project, &mbox, hefty_tests);
+
+            // Delete the temporary directory with the patch in it
+            fs::remove_dir_all(mbox.parent().unwrap())
+                .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
+            if project.push_results {
+                for result in results {
+                    patchwork.post_test_result(result, &patch.checks).unwrap();
+                }
+            }
+            if args.flag_count > 0 {
+                patch_count += 1;
+                debug!("Tested {} patches out of {}", patch_count, args.flag_count);
+                if patch_count >= args.flag_count {
+                    break 'daemon;
                 }
             }
         }

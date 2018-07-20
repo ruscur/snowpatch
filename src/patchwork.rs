@@ -300,8 +300,12 @@ impl PatchworkServer {
         serde_json::from_str(&self.get_url_string(url).unwrap())
     }
 
-    pub fn get_patch_query(&self) -> Result<Vec<Patch>, serde_json::Error> {
-        let url = format!("{}{}/patches/{}", &self.url, PATCHWORK_API, PATCHWORK_QUERY);
+    pub fn get_patch_query(&self, project: &str) -> Result<Vec<Patch>, serde_json::Error> {
+        let url = format!(
+            "{}{}/patches/{}&project={}",
+            &self.url, PATCHWORK_API, PATCHWORK_QUERY, project
+        );
+
         serde_json::from_str(&self.get_url_string(&url)
             .unwrap_or_else(|err| panic!("Failed to connect to Patchwork: {}", err)))
     }
