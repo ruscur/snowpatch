@@ -251,22 +251,12 @@ fn test_patch(
         let settings = settings.clone();
         let project = project.clone();
         let client = client.clone();
-        let settings_clone = settings.clone();
         let test_all_branches = project.test_all_branches.unwrap_or(true);
 
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new()
             .name(tag.to_string())
-            .spawn(move || {
-                run_tests(
-                    &settings_clone,
-                    client,
-                    &project,
-                    &tag,
-                    &branch_name,
-                    hefty_tests,
-                )
-            })
+            .spawn(move || run_tests(&settings, client, &project, &tag, &branch_name, hefty_tests))
             .unwrap();
         results.append(&mut test.join().unwrap());
 
