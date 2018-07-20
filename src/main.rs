@@ -21,8 +21,7 @@
 
 extern crate docopt;
 extern crate git2;
-extern crate hyper;
-extern crate hyper_openssl;
+extern crate reqwest;
 extern crate tempdir;
 extern crate url;
 #[macro_use]
@@ -36,11 +35,7 @@ extern crate toml;
 
 use git2::{BranchType, PushOptions, RemoteCallbacks};
 
-use hyper::client::ProxyConfig;
-use hyper::client::RedirectPolicy;
-use hyper::net::HttpsConnector;
-use hyper::Client;
-use hyper_openssl::OpensslClient;
+use reqwest::{Client, Proxy};
 
 use docopt::Docopt;
 
@@ -112,7 +107,7 @@ fn run_tests(
     let mut results: Vec<TestResult> = Vec::new();
     let jenkins = JenkinsBackend {
         base_url: settings.jenkins.url.clone(),
-        hyper_client: client,
+        reqwest_client: client,
         username: settings.jenkins.username.clone(),
         token: settings.jenkins.token.clone(),
     };
@@ -313,8 +308,6 @@ fn main() {
     let settings = settings::parse(&args.arg_config_file);
 
     // The HTTP client we'll use to access the APIs
-    let ssl = OpensslClient::new().unwrap();
-    let connector = HttpsConnector::new(ssl.clone());
     // TODO: Handle https_proxy
     let client = Arc::new(match env::var("http_proxy") {
         Ok(proxy_url) => {
@@ -326,21 +319,20 @@ fn main() {
             assert_eq!(proxy.scheme(), "http");
             // This should pass even if no trailing slash is in http_proxy
             assert_eq!(proxy.path(), "/");
-            let proxy_config = ProxyConfig::new(
-                proxy.scheme(),
-                proxy.host_str().unwrap().to_string(),
-                proxy.port().unwrap_or(80),
-                connector,
-                ssl,
-            );
-            let mut c = Client::with_proxy_config(proxy_config);
-            c.set_redirect_policy(RedirectPolicy::FollowAll);
+            let proxy = Proxy::all(&proxy_url).unwrap_or_else(|e| {
+                panic!("Couldn't set proxy: {:?}, error: {}", proxy_url, e);
+            });
+            let mut c = Client::builder().proxy(proxy).build().unwrap_or_else(|e| {
+                panic!(
+                    "Couldn't create client with proxy: {:?}, error: {}",
+                    proxy_url, e
+                );
+            });
             c
         }
         _ => {
             debug!("snowpatch starting without a HTTP proxy");
-            let mut c = Client::with_connector(connector);
-            c.set_redirect_policy(RedirectPolicy::FollowAll);
+            let mut c = Client::new();
             c
         }
     });

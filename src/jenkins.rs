@@ -20,7 +20,7 @@
 // * get artifacts + console log from completed build (do we make this configurable?)
 // * integrate into snowpatch worker thread
 
-extern crate hyper;
+extern crate reqwest;
 extern crate url;
 
 use std::collections::BTreeMap;
@@ -29,9 +29,8 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
-use hyper::client::{IntoUrl, RequestBuilder};
-use hyper::header::{Authorization, Basic, Headers, Location};
-use hyper::Client;
+use reqwest::header::{Authorization, Basic, Headers, Location};
+use reqwest::{Client, IntoUrl, Response};
 use serde_json::{self, Value};
 
 use patchwork::TestState;
@@ -49,7 +48,7 @@ pub trait CIBackend {
 
 pub struct JenkinsBackend {
     pub base_url: String,
-    pub hyper_client: Arc<Client>,
+    pub reqwest_client: Arc<Client>,
     pub username: Option<String>,
     pub token: Option<String>,
 }
@@ -69,13 +68,12 @@ impl CIBackend for JenkinsBackend {
             .extend_pairs(params)
             .finish();
 
-        let res = self.post(&format!(
+        let resp = self.post_url(&format!(
             "{}/job/{}/buildWithParameters?{}",
             self.base_url, job_name, params
-        )).send()
-            .expect("HTTP request error"); // TODO don't panic here
+        )).expect("HTTP request error"); // TODO don't panic here
 
-        match res.headers.get::<Location>() {
+        match resp.headers().get::<Location>() {
             Some(loc) => Ok(loc.to_string()),
             None => Err("No Location header returned"),
         }
@@ -100,12 +98,12 @@ impl JenkinsBackend {
         headers
     }
 
-    fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.hyper_client.get(url).headers(self.headers())
+    fn get_url<U: IntoUrl>(&self, url: U) -> Result<Response, reqwest::Error> {
+        self.reqwest_client.get(url).headers(self.headers()).send()
     }
 
-    fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.hyper_client.post(url).headers(self.headers())
+    fn post_url<U: IntoUrl>(&self, url: U) -> Result<Response, reqwest::Error> {
+        self.reqwest_client.post(url).headers(self.headers()).send()
     }
 
     fn get_api_json_object(&self, base_url: &str) -> Value {
@@ -113,9 +111,9 @@ impl JenkinsBackend {
         let url = format!("{}api/json", base_url);
         let mut result_str = String::new();
         loop {
-            let mut resp = self.get(&url).send().expect("HTTP request error");
+            let mut resp = self.get_url(&url).expect("HTTP request error");
 
-            if resp.status.is_server_error() {
+            if resp.status().is_server_error() {
                 sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
                 continue;
             }
