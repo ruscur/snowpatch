@@ -111,7 +111,14 @@ impl JenkinsBackend {
         let url = format!("{}api/json", base_url);
         let mut result_str = String::new();
         loop {
-            let mut resp = self.get_url(&url).expect("HTTP request error");
+            let mut resp = match self.get_url(&url) {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!("Couldn't hit Jenkins API: {}", e);
+                    sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
+                    continue;
+                }
+            };
 
             if resp.status().is_server_error() {
                 sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
