@@ -374,7 +374,16 @@ fn main() {
             Some(project) => {
                 let dependencies = patchwork.get_patch_dependencies(&patch);
                 let mbox = patchwork.get_patches_mbox(dependencies);
-                test_patch(&settings, &client, project, &mbox, true);
+                let results = test_patch(&settings, &client, project, &mbox, true);
+
+                // Delete the temporary directory with the patch in it
+                fs::remove_dir_all(mbox.parent().unwrap())
+                    .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
+                if project.push_results {
+                    for result in results {
+                        patchwork.post_test_result(result, &patch.checks).unwrap();
+                    }
+                }
             }
         }
         return;
