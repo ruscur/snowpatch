@@ -45,9 +45,9 @@ creation of snowpatch.
 Installing
 ----------
 
-snowpatch is a [Rust](https://www.rust-lang.org) program.  In order to compile 
-it, you will need Rust and its package manager, Cargo.  snowpatch should run 
-on any target that Rust compiles on, however it has only been tested on Linux.
+snowpatch is a [Rust](https://www.rust-lang.org) program.  In order to compile
+it, you will need Rust and its package manager, Cargo.  snowpatch should run on
+any target that supports Rust and Git, however it has only been tested on Linux.
 We do not provide pre-built binaries at this stage.
 
 ### Non-Rust dependencies
@@ -59,11 +59,17 @@ We do not provide pre-built binaries at this stage.
 * [OpenSSL](https://www.openssl.org) headers
 * [OpenSSH](https://www.openssh.com) headers
 
-### Building
+### Installing with cargo
 
-snowpatch can be compiled with `cargo build --release`, which will
-download and build the Rust packages we depend on. The executable can
-be found in `target/release/snowpatch`.
+To install the latest tagged release of snowpatch using cargo, run `cargo
+install snowpatch`, which will download and compile snowpatch and all its Rust
+dependencies. The snowpatch binary will be installed as `snowpatch`.
+
+### Building manually
+
+To compile snowpatch manually, clone the git repository and run `cargo build
+--release`. The executable can be found in `target/release/snowpatch` or
+executed using `cargo run`.
 
 
 Contributing
