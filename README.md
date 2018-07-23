@@ -17,6 +17,26 @@ At present, snowpatch supports
 [Patchwork](http://jk.ozlabs.org/projects/patchwork/) and
 [Jenkins](http://jenkins-ci.org).
 
+snowpatch is designed in line with Patchwork's philosophy of supplementing,
+rather than replacing, existing workflows. For projects which already use
+Patchwork as their core patch management tool, snowpatch does not impose any
+additional changes to the development workflow.
+
+snowpatch requires nothing more than a Patchwork account and Jenkins account
+with appropriate permissions and an API key. Many projects using patch-based
+workflows are highly decentralised, using Patchwork instances they do not
+administer, and build machines hidden behind corporate firewalls. As such,
+snowpatch is designed not to require administrator access or additional plugins
+for either Patchwork or Jenkins.
+
+snowpatch is deliberately minimalistic, which distinguishes it from tools like
+[Zuul](https://zuul-ci.org) which are more sophisticated and may be more
+appropriate for projects with a better ability to adapt their workflow around a
+comprehensive CI system. Other patch tracking systems that provide integrated
+support for CI systems, such as
+[Patchew](https://github.com/patchew-project/patchew), may also be appropriate
+for projects with suitable workflows.
+
 snowpatch is named in honour of
 [skiboot](https://github.com/open-power/skiboot), the project which inspired the
 creation of snowpatch.
