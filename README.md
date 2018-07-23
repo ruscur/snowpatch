@@ -42,6 +42,18 @@ snowpatch is named in honour of
 creation of snowpatch.
 
 
+Project Status
+--------------
+
+snowpatch is currently under heavy development. It implements enough core
+functionality to be useful for basic CI requirements, and is currently deployed
+in production for a small number of projects. There are many core features that
+are still yet to be implemented, and documentation is still incomplete.
+
+At this stage, there are no stability guarantees, and behaviour is liable to
+change significantly in new versions without notice.
+
+
 Installing
 ----------
 
@@ -70,6 +82,16 @@ dependencies. The snowpatch binary will be installed as `snowpatch`.
 To compile snowpatch manually, clone the git repository and run `cargo build
 --release`. The executable can be found in `target/release/snowpatch` or
 executed using `cargo run`.
+
+
+Documentation
+-------------
+
+For usage information, run `snowpatch --help`.
+
+Example configurations can be found in the [`examples`](examples) directory.
+
+Additional documentation can be found in the [`docs`](docs) directory.
 
 
 Contributing
