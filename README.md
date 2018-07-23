@@ -69,9 +69,9 @@ snowpatch is maintained by
 [Andrew Donnellan](mailto:andrew.donnellan@au1.ibm.com).
 
 
-License
+Licence
 -------
-Copyright © 2016 IBM Corporation.
+Copyright © 2016-2018 IBM Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
