@@ -1,5 +1,7 @@
-snowpatch - CI for patches [![Build Status](https://travis-ci.org/ruscur/snowpatch.svg?branch=master)](https://travis-ci.org/ruscur/snowpatch)
+snowpatch - CI for patches
 ==========================
+
+[![Build Status](https://travis-ci.org/ruscur/snowpatch.svg?branch=master)](https://travis-ci.org/ruscur/snowpatch) [![Crates.io](https://img.shields.io/crates/v/snowpatch.svg)](https://crates.io/crates/snowpatch)
 
 Overview
 -------
