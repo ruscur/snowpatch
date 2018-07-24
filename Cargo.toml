@@ -1,7 +1,7 @@
 #
 # snowpatch - continuous integration for patch-based workflows
 #
-# Copyright (C) 2016 IBM Corporation
+# Copyright (C) 2016-2018 IBM Corporation
 # Authors:
 #     Russell Currey <ruscur@russell.cc>
 #     Andrew Donnellan <andrew.donnellan@au1.ibm.com>
@@ -16,7 +16,7 @@
 
 [package]
 name = "snowpatch"
-version = "0.1.0"
+version = "0.2.0-beta.0"
 authors = ["Russell Currey <ruscur@russell.cc>",
 	   "Andrew Donnellan <andrew.donnellan@au1.ibm.com>"]
 homepage = "https://github.com/ruscur/snowpatch"
