@@ -429,6 +429,12 @@ fn main() {
                 continue;
             }
 
+            // Skip pull requests
+            if patch.pull_url.is_some() {
+                debug!("Skipping pull request {}", patch.name);
+                continue;
+            }
+
             // Skip if it's the wrong project
             if patch.project.link_name != args.flag_project {
                 warn!(
