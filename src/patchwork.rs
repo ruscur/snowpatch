@@ -284,10 +284,6 @@ impl PatchworkServer {
         Ok(resp.status())
     }
 
-    pub fn get_project(&self, url: &str) -> Result<Project, serde_json::Error> {
-        serde_json::from_str(&self.get_url_string(url).unwrap())
-    }
-
     pub fn get_patch(&self, patch_id: &u64) -> Result<Patch, serde_json::Error> {
         let url = format!(
             "{}{}/patches/{}{}",

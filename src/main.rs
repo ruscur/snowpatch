@@ -370,10 +370,8 @@ fn main() {
         let patch = patchwork
             .get_patch_by_url(&series.patches.last().unwrap().url)
             .unwrap();
-        // We have to do it this way since there's no project field on Series
-        let project = patchwork.get_project(&patch.project.name).unwrap();
-        match settings.projects.get(&project.link_name) {
-            None => panic!("Couldn't find project {}", &project.link_name),
+        match settings.projects.get(&patch.project.link_name) {
+            None => panic!("Couldn't find project {}", &patch.project.link_name),
             Some(project) => {
                 let dependencies = patchwork.get_patch_dependencies(&patch);
                 let mbox = patchwork.get_patches_mbox(dependencies);
