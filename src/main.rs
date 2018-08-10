@@ -401,9 +401,6 @@ fn main() {
         return;
     }
 
-    // The number of patches tested so far.  If --count isn't provided, this is unused.
-    let mut patch_count = 0;
-
     /*
      * Poll Patchwork for new patches.
      * If the patch is standalone (not part of a series), apply it.
@@ -411,9 +408,19 @@ fn main() {
      * Spawn tests.
      */
     'daemon: loop {
-        let patch_list = patchwork
-            .get_patch_query(&args.flag_project)
-            .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err));
+        let patch_list;
+
+        // TODO: This is hacky and we should refactor out daemon vs patch/count
+        // mode
+        if args.flag_count > 0 {
+            patch_list = patchwork
+                .get_patch_query_num(&args.flag_project, args.flag_count as usize)
+                .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err));
+        } else {
+            patch_list = patchwork
+                .get_patch_query(&args.flag_project)
+                .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err));
+        }
         info!("snowpatch is ready to test new revisions from Patchwork.");
         for patch in patch_list {
             // If it's already been tested, we can skip it
@@ -481,13 +488,9 @@ fn main() {
                     patchwork.post_test_result(result, &patch.checks).unwrap();
                 }
             }
-            if args.flag_count > 0 {
-                patch_count += 1;
-                debug!("Tested {} patches out of {}", patch_count, args.flag_count);
-                if patch_count >= args.flag_count {
-                    break 'daemon;
-                }
-            }
+        }
+        if args.flag_count > 0 {
+            break;
         }
         info!("Finished testing new revisions, sleeping.");
         thread::sleep(Duration::new(settings.patchwork.polling_interval * 60, 0));

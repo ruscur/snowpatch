@@ -25,7 +25,9 @@ use std::result::Result;
 use tempdir::TempDir;
 
 use reqwest;
-use reqwest::header::{qitem, Accept, Authorization, Basic, Connection, ContentType, Headers};
+use reqwest::header::{
+    qitem, Accept, Authorization, Basic, Connection, ContentType, Headers, Link, RelationType,
+};
 use reqwest::Client;
 use reqwest::Response;
 use reqwest::StatusCode;
@@ -304,6 +306,43 @@ impl PatchworkServer {
 
         serde_json::from_str(&self.get_url_string(&url)
             .unwrap_or_else(|err| panic!("Failed to connect to Patchwork: {}", err)))
+    }
+
+    fn get_next_link(&self, resp: &Response) -> Option<String> {
+        let next = resp.headers().get::<Link>()?;
+        for val in next.values() {
+            if let Some(rel) = val.rel() {
+                if rel.iter().any(|reltype| reltype == &RelationType::Next) {
+                    return Some(val.link().to_string());
+                }
+            }
+        }
+        None
+    }
+
+    pub fn get_patch_query_num(
+        &self,
+        project: &str,
+        num_patches: usize,
+    ) -> Result<Vec<Patch>, serde_json::Error> {
+        let mut list: Vec<Patch> = vec![];
+        let mut url = Some(format!(
+            "{}{}/patches/{}&project={}",
+            &self.url, PATCHWORK_API, PATCHWORK_QUERY, project
+        ));
+
+        while let Some(real_url) = url {
+            let resp = self.get_url(&real_url)
+                .unwrap_or_else(|err| panic!("Failed to connect to Patchwork: {}", err));
+            url = self.get_next_link(&resp);
+            let new_patches: Vec<Patch> = serde_json::from_reader(resp)?;
+            list.extend(new_patches);
+            if list.len() >= num_patches {
+                break;
+            }
+        }
+        list.truncate(num_patches);
+        Ok(list)
     }
 
     pub fn get_patch_dependencies(&self, patch: &Patch) -> Vec<Patch> {
