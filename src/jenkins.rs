@@ -68,10 +68,11 @@ impl CIBackend for JenkinsBackend {
             .extend_pairs(params)
             .finish();
 
-        let resp = self.post_url(&format!(
-            "{}/job/{}/buildWithParameters?{}",
-            self.base_url, job_name, params
-        )).expect("HTTP request error"); // TODO don't panic here
+        let resp =
+            self.post_url(&format!(
+                "{}/job/{}/buildWithParameters?{}",
+                self.base_url, job_name, params
+            )).expect("HTTP request error"); // TODO don't panic here
 
         match resp.headers().get::<Location>() {
             Some(loc) => Ok(loc.to_string()),
@@ -165,7 +166,8 @@ impl JenkinsBackend {
     }
 
     pub fn get_build_result(&self, build_url: &str) -> Option<TestState> {
-        match self.get_api_json_object(build_url)
+        match self
+            .get_api_json_object(build_url)
             .get("result")
             .unwrap()
             .as_str()
