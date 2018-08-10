@@ -16,7 +16,7 @@
 
 [package]
 name = "snowpatch"
-version = "0.2.0-beta.1"
+version = "0.2.0"
 authors = ["Russell Currey <ruscur@russell.cc>",
 	   "Andrew Donnellan <andrew.donnellan@au1.ibm.com>"]
 homepage = "https://github.com/ruscur/snowpatch"

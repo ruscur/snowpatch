@@ -788,7 +788,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "snowpatch"
-version = "0.2.0-beta.1"
+version = "0.2.0"
 dependencies = [
  "docopt 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.12 (registry+https://github.com/rust-lang/crates.io-index)",
