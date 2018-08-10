@@ -13,7 +13,7 @@
 // utils.rs - snowpatch generic helpers
 //
 
-pub fn sanitise_path(path: String) -> String {
+pub fn sanitise_path(path: &str) -> String {
     path.replace("/", "_")
         .replace("\\", "_")
         .replace(".", "_")

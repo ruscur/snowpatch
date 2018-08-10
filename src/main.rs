@@ -118,7 +118,7 @@ fn run_tests(
             continue;
         }
         let mut jenkins_params = Vec::<(&str, &str)>::new();
-        for (param_name, param_value) in job.parameters.iter() {
+        for (param_name, param_value) in &job.parameters {
             // TODO(ajd): do this more neatly
             debug!("Param name {}, value {}", &param_name, &param_value);
             jenkins_params.push((param_name, param_value));
@@ -151,7 +151,7 @@ fn run_tests(
                 format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
             ),
             state: test_result,
-            context: Some(format!("{}", job.title.replace("/", "_")).to_string()),
+            context: Some(job.title.replace("/", "_")),
             target_url: Some(jenkins.get_results_url(&build_url_real, &job.parameters)),
         });
     }
@@ -170,7 +170,7 @@ fn test_patch(
     if !path.is_file() {
         return results;
     }
-    let tag = utils::sanitise_path(path.file_name().unwrap().to_str().unwrap().to_string());
+    let tag = utils::sanitise_path(path.file_name().unwrap().to_str().unwrap());
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
 
     let mut push_callbacks = RemoteCallbacks::new();
@@ -318,18 +318,16 @@ fn main() {
             let proxy = Proxy::all(&proxy_url).unwrap_or_else(|e| {
                 panic!("Couldn't set proxy: {:?}, error: {}", proxy_url, e);
             });
-            let mut c = Client::builder().proxy(proxy).build().unwrap_or_else(|e| {
+            Client::builder().proxy(proxy).build().unwrap_or_else(|e| {
                 panic!(
                     "Couldn't create client with proxy: {:?}, error: {}",
                     proxy_url, e
                 );
-            });
-            c
+            })
         }
         _ => {
             debug!("snowpatch starting without a HTTP proxy");
-            let mut c = Client::new();
-            c
+            Client::new()
         }
     });
 
@@ -347,7 +345,7 @@ fn main() {
 
     if args.flag_patch > 0 {
         info!("snowpatch is testing a patch from Patchwork.");
-        let patch = patchwork.get_patch(&(args.flag_patch as u64)).unwrap();
+        let patch = patchwork.get_patch(u64::from(args.flag_patch)).unwrap();
         match settings.projects.get(&patch.project.link_name) {
             None => panic!("Couldn't find project {}", &patch.project.link_name),
             Some(project) => {
@@ -357,7 +355,7 @@ fn main() {
                 } else {
                     patchwork.get_patch_mbox(&patch)
                 };
-                test_patch(&settings, &client, project, &mbox, true);
+                test_patch(&settings, &client, &project, &mbox, true);
             }
         }
         return;
@@ -365,7 +363,7 @@ fn main() {
 
     if args.flag_series > 0 {
         info!("snowpatch is testing a series from Patchwork.");
-        let series = patchwork.get_series(&(args.flag_series as u64)).unwrap();
+        let series = patchwork.get_series(u64::from(args.flag_series)).unwrap();
         // The last patch in the series, so its dependencies are the whole series
         let patch = patchwork
             .get_patch_by_url(&series.patches.last().unwrap().url)
@@ -375,14 +373,14 @@ fn main() {
             Some(project) => {
                 let dependencies = patchwork.get_patch_dependencies(&patch);
                 let mbox = patchwork.get_patches_mbox(dependencies);
-                let results = test_patch(&settings, &client, project, &mbox, true);
+                let results = test_patch(&settings, &client, &project, &mbox, true);
 
                 // Delete the temporary directory with the patch in it
                 fs::remove_dir_all(mbox.parent().unwrap())
                     .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
                 if project.push_results {
                     for result in results {
-                        patchwork.post_test_result(result, &patch.checks).unwrap();
+                        patchwork.post_test_result(&result, &patch.checks).unwrap();
                     }
                 }
             }
@@ -391,12 +389,12 @@ fn main() {
     }
 
     // At this point, specifying a project is required
-    let project = settings.projects.get(&args.flag_project).unwrap();
+    let project = &settings.projects[&args.flag_project];
 
     if args.flag_mbox != "" {
         info!("snowpatch is testing a local patch.");
         let patch = Path::new(&args.flag_mbox);
-        test_patch(&settings, &client, project, patch, true);
+        test_patch(&settings, &client, &project, patch, true);
 
         return;
     }
@@ -407,20 +405,18 @@ fn main() {
      * If the patch is part of a series, apply all of its dependencies.
      * Spawn tests.
      */
-    'daemon: loop {
-        let patch_list;
-
+    loop {
         // TODO: This is hacky and we should refactor out daemon vs patch/count
         // mode
-        if args.flag_count > 0 {
-            patch_list = patchwork
+        let patch_list = if args.flag_count > 0 {
+            patchwork
                 .get_patch_query_num(&args.flag_project, args.flag_count as usize)
-                .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err));
+                .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err))
         } else {
-            patch_list = patchwork
+            patchwork
                 .get_patch_query(&args.flag_project)
-                .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err));
-        }
+                .unwrap_or_else(|err| panic!("Failed to obtain patch list: {}", err))
+        };
         info!("snowpatch is ready to test new revisions from Patchwork.");
         for patch in patch_list {
             // If it's already been tested, we can skip it
@@ -478,14 +474,14 @@ fn main() {
                 patchwork.get_patch_mbox(&patch)
             };
 
-            let results = test_patch(&settings, &client, project, &mbox, hefty_tests);
+            let results = test_patch(&settings, &client, &project, &mbox, hefty_tests);
 
             // Delete the temporary directory with the patch in it
             fs::remove_dir_all(mbox.parent().unwrap())
                 .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
             if project.push_results {
                 for result in results {
-                    patchwork.post_test_result(result, &patch.checks).unwrap();
+                    patchwork.post_test_result(&result, &patch.checks).unwrap();
                 }
             }
         }

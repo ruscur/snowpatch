@@ -218,7 +218,7 @@ impl PatchworkServer {
         PatchworkServer {
             url: url.clone(),
             client: client.clone(),
-            headers: headers,
+            headers,
         }
     }
 
@@ -266,7 +266,7 @@ impl PatchworkServer {
 
     pub fn post_test_result(
         &self,
-        result: TestResult,
+        result: &TestResult,
         checks_url: &str,
     ) -> Result<StatusCode, reqwest::Error> {
         let encoded = serde_json::to_string(&result).unwrap();
@@ -286,7 +286,7 @@ impl PatchworkServer {
         Ok(resp.status())
     }
 
-    pub fn get_patch(&self, patch_id: &u64) -> Result<Patch, serde_json::Error> {
+    pub fn get_patch(&self, patch_id: u64) -> Result<Patch, serde_json::Error> {
         let url = format!(
             "{}{}/patches/{}{}",
             &self.url, PATCHWORK_API, patch_id, PATCHWORK_QUERY
@@ -304,8 +304,11 @@ impl PatchworkServer {
             &self.url, PATCHWORK_API, PATCHWORK_QUERY, project
         );
 
-        serde_json::from_str(&self.get_url_string(&url)
-            .unwrap_or_else(|err| panic!("Failed to connect to Patchwork: {}", err)))
+        serde_json::from_str(
+            &self
+                .get_url_string(&url)
+                .unwrap_or_else(|err| panic!("Failed to connect to Patchwork: {}", err)),
+        )
     }
 
     fn get_next_link(&self, resp: &Response) -> Option<String> {
@@ -332,7 +335,8 @@ impl PatchworkServer {
         ));
 
         while let Some(real_url) = url {
-            let resp = self.get_url(&real_url)
+            let resp = self
+                .get_url(&real_url)
                 .unwrap_or_else(|err| panic!("Failed to connect to Patchwork: {}", err));
             url = self.get_next_link(&resp);
             let new_patches: Vec<Patch> = serde_json::from_reader(resp)?;
@@ -364,7 +368,7 @@ impl PatchworkServer {
     pub fn get_patch_mbox(&self, patch: &Patch) -> PathBuf {
         let dir = TempDir::new("snowpatch").unwrap().into_path();
         let mut path = dir.clone();
-        let tag = utils::sanitise_path(patch.name.clone());
+        let tag = utils::sanitise_path(&patch.name);
         path.push(format!("{}.mbox", tag));
 
         let mut mbox_resp = self.get_url(&patch.mbox).unwrap();
@@ -380,7 +384,7 @@ impl PatchworkServer {
     pub fn get_patches_mbox(&self, patches: Vec<Patch>) -> PathBuf {
         let dir = TempDir::new("snowpatch").unwrap().into_path();
         let mut path = dir.clone();
-        let tag = utils::sanitise_path(patches.last().unwrap().name.clone());
+        let tag = utils::sanitise_path(&patches.last().unwrap().name);
         path.push(format!("{}.mbox", tag));
 
         let mut mbox = OpenOptions::new()
@@ -399,7 +403,7 @@ impl PatchworkServer {
         path
     }
 
-    pub fn get_series(&self, series_id: &u64) -> Result<Series, serde_json::Error> {
+    pub fn get_series(&self, series_id: u64) -> Result<Series, serde_json::Error> {
         let url = format!(
             "{}{}/series/{}{}",
             &self.url, PATCHWORK_API, series_id, PATCHWORK_QUERY

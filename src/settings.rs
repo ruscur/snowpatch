@@ -157,18 +157,18 @@ impl<'de> Deserialize<'de> for Job {
                 let job: String = job.ok_or_else(|| de::Error::missing_field("job"))?;
                 let remote = remote.ok_or_else(|| de::Error::missing_field("remote"))?;
                 let branch = branch.ok_or_else(|| de::Error::missing_field("branch"))?;
-                let title = title.unwrap_or(job.clone());
+                let title = title.unwrap_or_else(|| job.clone());
                 let hefty = hefty.unwrap_or(false);
                 let warn_on_fail = warn_on_fail.unwrap_or(false);
 
                 Ok(Job {
-                    job: job,
-                    title: title,
-                    remote: remote,
-                    branch: branch,
-                    hefty: hefty,
-                    warn_on_fail: warn_on_fail,
-                    parameters: parameters,
+                    job,
+                    title,
+                    remote,
+                    branch,
+                    hefty,
+                    warn_on_fail,
+                    parameters,
                 })
             }
         }
@@ -188,10 +188,7 @@ pub struct Config {
 pub fn parse(path: &str) -> Config {
     let mut toml_config = String::new();
 
-    let mut file = match File::open(&path) {
-        Ok(file) => file,
-        Err(_) => panic!("Couldn't open config file, exiting."),
-    };
+    let mut file = File::open(&path).expect("Couldn't open config file, exiting.");
 
     file.read_to_string(&mut toml_config)
         .unwrap_or_else(|err| panic!("Couldn't read config: {}", err));
