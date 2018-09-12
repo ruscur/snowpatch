@@ -14,18 +14,5 @@
 //
 
 pub fn sanitise_path(path: &str) -> String {
-    path.replace("/", "_")
-        .replace("\\", "_")
-        .replace(".", "_")
-        .replace("~", "_")
-        .replace(" ", "_")
-        .replace(":", "")
-        .replace("[", "_")
-        .replace("]", "_")
-        .replace("'", "")
-        .replace("\"", "")
-        .replace("(", "_")
-        .replace(")", "_")
-        .replace("*", "_")
-        .replace("?", "_")
+    path.replace(|c: char| !c.is_alphanumeric(), "_")
 }
