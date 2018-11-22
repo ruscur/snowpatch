@@ -191,9 +191,19 @@ impl JenkinsBackend {
     }
 
     pub fn get_results_url(&self, build_url: &str, job: &BTreeMap<String, String>) -> String {
+        let default_url = format!("{}/", build_url);
         match job.get("artifact") {
-            Some(artifact) => format!("{}/artifact/{}", build_url, artifact),
-            None => format!("{}/", build_url),
+            Some(artifact) => {
+                let artifact_url = format!("{}/artifact/{}", build_url, artifact);
+                match self.get_url(&artifact_url) {
+                    Ok(mut resp) => match resp.status().is_success() {
+                        true => artifact_url,
+                        false => default_url,
+                    },
+                    Err(_e) => default_url,
+                }
+            }
+            None => default_url,
         }
     }
 
