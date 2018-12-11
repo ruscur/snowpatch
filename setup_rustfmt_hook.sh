@@ -2,6 +2,7 @@
 rustup component add rustfmt-preview
 
 rustfmt_path=`which rustfmt`
+mkdir -p .git/hooks
 echo "#!/bin/bash
 declare -a rust_files=()
 files=\$(git diff-index --name-only HEAD)
