@@ -20,6 +20,7 @@
 // * get artifacts + console log from completed build (do we make this configurable?)
 // * integrate into snowpatch worker thread
 
+extern crate base64;
 extern crate reqwest;
 extern crate url;
 
@@ -29,7 +30,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
-use reqwest::header::{Authorization, Basic, Headers, Location};
+use reqwest::header::{HeaderMap, AUTHORIZATION, LOCATION};
 use reqwest::{Client, IntoUrl, Response};
 use serde_json::{self, Value};
 
@@ -68,14 +69,15 @@ impl CIBackend for JenkinsBackend {
             .extend_pairs(params)
             .finish();
 
-        let resp =
-            self.post_url(&format!(
+        let resp = self
+            .post_url(&format!(
                 "{}/job/{}/buildWithParameters?{}",
                 self.base_url, job_name, params
             )).expect("HTTP request error"); // TODO don't panic here
 
-        match resp.headers().get::<Location>() {
-            Some(loc) => Ok(loc.to_string()),
+        match resp.headers().get(LOCATION) {
+            // TODO do we actually have to return a string, coud we change the API?
+            Some(loc) => Ok(loc.to_str().unwrap().to_string()),
             None => Err("No Location header returned"),
         }
     }
@@ -88,14 +90,20 @@ pub enum JenkinsBuildStatus {
 }
 
 impl JenkinsBackend {
-    fn headers(&self) -> Headers {
-        let mut headers = Headers::new();
+    fn headers(&self) -> HeaderMap {
+        let mut headers = HeaderMap::new();
         if let Some(ref username) = self.username {
-            headers.set(Authorization(Basic {
-                username: username.clone(),
-                password: self.token.clone(),
-            }));
-        }
+            if let Some(ref token) = self.token {
+                headers.insert(
+                    AUTHORIZATION,
+                    format!(
+                        "Basic {}",
+                        base64::encode(&format!("{}:{}", username, token))
+                    ).parse()
+                    .unwrap(),
+                );
+            }
+        };
         headers
     }
 
@@ -139,14 +147,13 @@ impl JenkinsBackend {
             match entry.get("executable") {
                 Some(exec) => {
                     return Some(
-                        exec
-                                          .as_object() // Option<BTreeMap>
-                                          .unwrap() // BTreeMap
-                                          .get("url") // Option<&str>
-                                          .unwrap() // &str ?
-                                          .as_str()
-                                          .unwrap()
-                                          .to_string(),
+                        exec.as_object() // Option<BTreeMap>
+                            .unwrap() // BTreeMap
+                            .get("url") // Option<&str>
+                            .unwrap() // &str ?
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
                     );
                 }
                 None => sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL)),
