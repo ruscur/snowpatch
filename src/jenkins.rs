@@ -197,6 +197,26 @@ impl JenkinsBackend {
         }
     }
 
+    pub fn get_description(
+        &self,
+        build_url: &str,
+        job: &BTreeMap<String, String>,
+    ) -> Option<String> {
+        match job.get("description") {
+            Some(artifact) => match self.get_url(&format!("{}/artifact/{}", build_url, artifact)) {
+                Ok(mut resp) => match resp.status().is_success() {
+                    true => match resp.text() {
+                        Ok(text) => Some(text),
+                        Err(_e) => None,
+                    },
+                    false => None,
+                },
+                Err(_e) => None,
+            },
+            None => None,
+        }
+    }
+
     pub fn wait_build(&self, build_url: &str) -> JenkinsBuildStatus {
         // TODO: Implement a timeout?
         while self.get_build_status(build_url) != JenkinsBuildStatus::Done {

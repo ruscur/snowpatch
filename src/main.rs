@@ -150,9 +150,12 @@ fn run_tests(
             test_result = TestState::Warning;
         }
         results.push(TestResult {
-            description: Some(
-                format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
-            ),
+            description: match jenkins.get_description(&build_url_real, &job.parameters) {
+                Some(description) => Some(description),
+                None => Some(
+                    format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
+                ),
+            },
             state: test_result,
             context: Some(job.title.replace("/", "_")),
             target_url: Some(jenkins.get_results_url(&build_url_real, &job.parameters)),
