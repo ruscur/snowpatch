@@ -25,15 +25,15 @@ use std::result::Result;
 use tempdir::TempDir;
 
 use reqwest;
-use reqwest::header::{
-    qitem, Accept, Authorization, Basic, Connection, ContentType, Headers, Link, RelationType,
-};
+use reqwest::header::{HeaderMap, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client;
 use reqwest::Response;
 use reqwest::StatusCode;
 
 use serde::{self, Serializer};
 use serde_json;
+
+use base64;
 
 use utils;
 
@@ -205,16 +205,19 @@ impl TestResult {
 
 pub struct PatchworkServer {
     pub url: String,
-    headers: Headers,
+    headers: HeaderMap,
     pub client: std::sync::Arc<Client>,
 }
 
 impl PatchworkServer {
     #[cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
     pub fn new(url: &String, client: &std::sync::Arc<Client>) -> PatchworkServer {
-        let mut headers = Headers::new();
-        headers.set(Accept(vec![qitem(reqwest::mime::APPLICATION_JSON)]));
-        headers.set(ContentType(reqwest::mime::APPLICATION_JSON));
+        let mut headers = HeaderMap::new();
+        // These .parse().unwrap() blocks are making sure it's a valid ASCII
+        // header value.  They don't need to be refactored and hopefully in
+        // future won't be necessary with newer reqwest versions.
+        headers.insert(ACCEPT, "application/json".parse().unwrap());
+        headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
         PatchworkServer {
             url: url.clone(),
             client: client.clone(),
@@ -231,34 +234,29 @@ impl PatchworkServer {
     ) {
         match (username, password, token) {
             (&None, &None, &Some(ref token)) => {
-                self.headers.set(Authorization(format!("Token {}", token)));
+                self.headers
+                    .insert(AUTHORIZATION, format!("Token {}", token).parse().unwrap());
             }
             (&Some(ref username), &Some(ref password), &None) => {
-                self.headers.set(Authorization(Basic {
-                    username: username.clone(),
-                    password: Some(password.clone()),
-                }));
+                self.headers.insert(
+                    AUTHORIZATION,
+                    format!(
+                        "Basic {}",
+                        base64::encode(&format!("{}:{}", username, password))
+                    ).parse()
+                    .unwrap(),
+                );
             }
             _ => panic!("Invalid patchwork authentication details"),
         }
     }
 
     pub fn get_url(&self, url: &str) -> std::result::Result<Response, reqwest::Error> {
-        self.client
-            .get(&*url)
-            .headers(self.headers.clone())
-            .header(Connection::close())
-            .send()
+        self.client.get(&*url).headers(self.headers.clone()).send()
     }
 
     pub fn get_url_string(&self, url: &str) -> std::result::Result<String, reqwest::Error> {
-        let mut resp = try!(
-            self.client
-                .get(&*url)
-                .headers(self.headers.clone())
-                .header(Connection::close())
-                .send()
-        );
+        let mut resp = try!(self.client.get(&*url).headers(self.headers.clone()).send());
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         Ok(String::from_utf8(body).unwrap())
@@ -282,7 +280,7 @@ impl PatchworkServer {
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         trace!("{}", String::from_utf8(body).unwrap());
-        assert_eq!(resp.status(), StatusCode::Created);
+        assert_eq!(resp.status(), StatusCode::CREATED);
         Ok(resp.status())
     }
 
@@ -311,8 +309,9 @@ impl PatchworkServer {
         )
     }
 
-    fn get_next_link(&self, resp: &Response) -> Option<String> {
-        let next = resp.headers().get::<Link>()?;
+    fn get_next_link(&self, _resp: &Response) -> Option<String> {
+        /*
+        let next = resp.headers().get(LINK)?;
         for val in next.values() {
             if let Some(rel) = val.rel() {
                 if rel.iter().any(|reltype| reltype == &RelationType::Next) {
@@ -320,6 +319,7 @@ impl PatchworkServer {
                 }
             }
         }
+*/
         None
     }
 
