@@ -186,13 +186,13 @@ fn test_patch(
         let tag = format!("{}_{}", tag, branch_name);
         info!("Configuring local branch for {}.", tag);
         debug!("Switching to base branch {}...", branch_name);
-        git::checkout_branch(&repo, &branch_name);
+        git::checkout_branch(&repo, &branch_name).unwrap();
 
         // Make sure we're up to date
         git::pull(&repo).unwrap();
 
         debug!("Creating a new branch...");
-        let commit = git::get_latest_commit(&repo);
+        let commit = git::get_latest_commit(&repo).unwrap();
         let mut branch = repo.branch(&tag, &commit, true).unwrap();
         debug!("Switching to branch...");
         repo.set_head(branch.get().name().unwrap())
@@ -210,7 +210,7 @@ fn test_patch(
             git::push_to_remote(&mut remote, &branch, false, &mut push_opts).unwrap();
         }
 
-        git::checkout_branch(&repo, &branch_name);
+        git::checkout_branch(&repo, &branch_name).unwrap();
         // we need to find the branch again since its head has moved
         branch = repo.find_branch(&tag, BranchType::Local).unwrap();
         branch.delete().unwrap();
@@ -498,7 +498,7 @@ fn run() -> Result<(), Box<Error>> {
 }
 
 fn main() {
-     if let Err(e) = run() {
+    if let Err(e) = run() {
         println!("Error: {}", e);
         process::exit(1);
     }
