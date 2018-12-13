@@ -18,7 +18,8 @@ use toml;
 
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 
-use git2::{Error, Repository};
+use git2;
+use git2::Repository;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -69,7 +70,7 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn get_repo(&self) -> Result<Repository, Error> {
+    pub fn get_repo(&self) -> Result<Repository, git2::Error> {
         Repository::open(&self.repository)
     }
 }
