@@ -45,8 +45,10 @@ use env_logger::Builder;
 use log::LevelFilter;
 
 use std::env;
+use std::error::Error;
 use std::fs;
 use std::path::Path;
+use std::process;
 use std::string::String;
 use std::sync::Arc;
 use std::thread;
@@ -282,7 +284,7 @@ fn test_patch(
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(cyclomatic_complexity))]
-fn main() {
+fn run() -> Result<(), Box<Error>> {
     let mut log_builder = Builder::new();
     // By default, log at the "info" level for every module
     log_builder.filter(None, LevelFilter::Info);
@@ -358,7 +360,7 @@ fn main() {
                 test_patch(&settings, &client, &project, &mbox, true);
             }
         }
-        return;
+        return Ok(());
     }
 
     if args.flag_series > 0 {
@@ -385,7 +387,7 @@ fn main() {
                 }
             }
         }
-        return;
+        return Ok(());
     }
 
     // At this point, specifying a project is required
@@ -396,7 +398,7 @@ fn main() {
         let patch = Path::new(&args.flag_mbox);
         test_patch(&settings, &client, &project, patch, true);
 
-        return;
+        return Ok(());
     }
 
     /*
@@ -490,5 +492,14 @@ fn main() {
         }
         info!("Finished testing new revisions, sleeping.");
         thread::sleep(Duration::new(settings.patchwork.polling_interval * 60, 0));
+    }
+
+    Ok(())
+}
+
+fn main() {
+     if let Err(e) = run() {
+        println!("Error: {}", e);
+        process::exit(1);
     }
 }
