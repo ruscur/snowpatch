@@ -22,6 +22,7 @@ use git2;
 use git2::Repository;
 
 use std::collections::BTreeMap;
+use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
@@ -186,23 +187,18 @@ pub struct Config {
     pub projects: BTreeMap<String, Project>,
 }
 
-pub fn parse(path: &str) -> Config {
+pub fn parse(path: &str) -> Result<Config, Box<Error>> {
     let mut toml_config = String::new();
 
-    let mut file = File::open(&path).expect("Couldn't open config file, exiting.");
+    File::open(&path)
+        .map_err(|e| format!("Unable to open config file: {}", e))?
+        .read_to_string(&mut toml_config)
+        .map_err(|e| format!("Unable to read config file: {}", e))?;
 
-    file.read_to_string(&mut toml_config)
-        .unwrap_or_else(|err| panic!("Couldn't read config: {}", err));
+    let config = toml::de::from_str::<Config>(&toml_config)
+        .map_err(|e| format!("Unable to parse config file: {}", e))?;
 
-    let toml_config = toml::de::from_str::<Config>(&toml_config);
-
-    match toml_config {
-        Ok(config_inside) => config_inside,
-        Err(err) => {
-            error!("TOML error: {}", err);
-            panic!("Could not parse configuration file, exiting");
-        }
-    }
+    Ok(config)
 }
 
 #[cfg(test)]
@@ -210,19 +206,23 @@ mod test {
     use settings::*;
 
     #[test]
-    #[should_panic(expected = "Couldn't open config file")]
-    fn bad_path() {
-        parse("/nonexistent/config.file");
+    fn bad_path() -> Result<(), &'static str> {
+        match parse("/nonexistent/config.file") {
+            Ok(_) => Err("Didn't fail opening non-existent file?"),
+            Err(_) => Ok(()),
+        }
     }
 
     #[test]
-    fn parse_example_openpower() {
-        parse("examples/openpower.toml");
+    fn parse_example_openpower() -> Result<(), Box<Error>> {
+        parse("examples/openpower.toml").map(|_| ())
     }
 
     #[test]
-    #[should_panic(expected = "Could not parse configuration file, exiting")]
-    fn parse_example_invalid() {
-        parse("examples/tests/invalid.toml");
+    fn parse_example_invalid() -> Result<(), &'static str> {
+        match parse("examples/tests/invalid.toml") {
+            Ok(_) => Err("Didn't fail parsing invalid TOML?"),
+            Err(_) => Ok(())
+        }
     }
 }

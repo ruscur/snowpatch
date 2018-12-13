@@ -303,7 +303,7 @@ fn run() -> Result<(), Box<Error>> {
         .and_then(|d| d.version(Some(version)).deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    let settings = settings::parse(&args.arg_config_file);
+    let settings = settings::parse(&args.arg_config_file)?;
 
     // The HTTP client we'll use to access the APIs
     // TODO: Handle https_proxy
