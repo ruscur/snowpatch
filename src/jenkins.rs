@@ -25,6 +25,7 @@ extern crate reqwest;
 extern crate url;
 
 use std::collections::BTreeMap;
+use std::error::Error;
 use std::io::Read;
 use std::sync::Arc;
 use std::thread::sleep;
@@ -73,7 +74,8 @@ impl CIBackend for JenkinsBackend {
             .post_url(&format!(
                 "{}/job/{}/buildWithParameters?{}",
                 self.base_url, job_name, params
-            )).expect("HTTP request error"); // TODO don't panic here
+            ))
+            .expect("HTTP request error"); // TODO don't panic here
 
         match resp.headers().get(LOCATION) {
             // TODO do we actually have to return a string, coud we change the API?
@@ -115,14 +117,14 @@ impl JenkinsBackend {
         self.reqwest_client.post(url).headers(self.headers()).send()
     }
 
-    fn get_api_json_object(&self, base_url: &str) -> Value {
-        // TODO: Don't panic on failure, fail more gracefully
+    fn get_api_json_object(&self, base_url: &str) -> Result<Value, Box<Error>> {
         let url = format!("{}api/json", base_url);
         let mut result_str = String::new();
         loop {
             let mut resp = match self.get_url(&url) {
                 Ok(r) => r,
                 Err(e) => {
+                    // TODO: We have to time out rather than spinning indefinitely
                     warn!("Couldn't hit Jenkins API: {}", e);
                     sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
                     continue;
@@ -130,62 +132,60 @@ impl JenkinsBackend {
             };
 
             if resp.status().is_server_error() {
+                // TODO: Timeout
                 sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
                 continue;
             }
             resp.read_to_string(&mut result_str)
-                .unwrap_or_else(|err| panic!("Couldn't read from server: {}", err));
+                .map_err(|e| format!("Couldn't read from server: {}", e))?;
             break;
         }
         serde_json::from_str(&result_str)
-            .unwrap_or_else(|err| panic!("Couldn't parse JSON from Jenkins: {}", err))
+            .map_err(|e| format!("Couldn't parse JSON from Jenkins: {}", e).into())
     }
 
-    pub fn get_build_url(&self, build_queue_entry: &str) -> Option<String> {
+    pub fn get_build_url(&self, build_queue_entry: &str) -> Result<String, Box<Error>> {
         loop {
-            let entry = self.get_api_json_object(build_queue_entry);
+            let entry = self.get_api_json_object(build_queue_entry)?;
             match entry.get("executable") {
                 Some(exec) => {
-                    return Some(
-                        exec.as_object() // Option<BTreeMap>
-                            .unwrap() // BTreeMap
-                            .get("url") // Option<&str>
-                            .unwrap() // &str ?
-                            .as_str()
-                            .unwrap()
-                            .to_string(),
-                    );
+                    let url = exec
+                        .as_object() // Option<BTreeMap>
+                        .unwrap() // BTreeMap
+                        .get("url") // Option<&str>
+                        .unwrap() // &str ?
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    return Ok(url);
                 }
+                // TODO: Timeout / handle this case properly
                 None => sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL)),
             }
         }
     }
 
-    pub fn get_build_status(&self, build_url: &str) -> JenkinsBuildStatus {
-        if self.get_api_json_object(build_url)["building"]
-            .as_bool()
-            .unwrap()
-        {
-            JenkinsBuildStatus::Running
-        } else {
-            JenkinsBuildStatus::Done
+    pub fn get_build_status(&self, build_url: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
+        match self.get_api_json_object(build_url)?["building"].as_bool() {
+            Some(true) => Ok(JenkinsBuildStatus::Running),
+            Some(false) => Ok(JenkinsBuildStatus::Done),
+            None => Err("Error getting build status".into()),
         }
     }
 
-    pub fn get_build_result(&self, build_url: &str) -> Option<TestState> {
+    pub fn get_build_result(&self, build_url: &str) -> Result<TestState, Box<Error>> {
         match self
-            .get_api_json_object(build_url)
+            .get_api_json_object(build_url)?
             .get("result")
-            .unwrap()
-            .as_str()
+            .map(|v| v.as_str().unwrap_or("PENDING"))
         {
-            None => None,
+            None => Ok(TestState::Pending),
             Some(result) => match result {
                 // TODO: Improve this...
-                "SUCCESS" => Some(TestState::Success),
-                "FAILURE" => Some(TestState::Fail),
-                "UNSTABLE" => Some(TestState::Warning),
-                _ => Some(TestState::Pending),
+                "SUCCESS" => Ok(TestState::Success),
+                "FAILURE" => Ok(TestState::Fail),
+                "UNSTABLE" => Ok(TestState::Warning),
+                _ => Ok(TestState::Pending),
             },
         }
     }
@@ -227,11 +227,11 @@ impl JenkinsBackend {
         }
     }
 
-    pub fn wait_build(&self, build_url: &str) -> JenkinsBuildStatus {
+    pub fn wait_build(&self, build_url: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
         // TODO: Implement a timeout?
-        while self.get_build_status(build_url) != JenkinsBuildStatus::Done {
+        while self.get_build_status(build_url)? != JenkinsBuildStatus::Done {
             sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
         }
-        JenkinsBuildStatus::Done
+        Ok(JenkinsBuildStatus::Done)
     }
 }

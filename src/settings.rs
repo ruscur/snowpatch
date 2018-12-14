@@ -222,7 +222,7 @@ mod test {
     fn parse_example_invalid() -> Result<(), &'static str> {
         match parse("examples/tests/invalid.toml") {
             Ok(_) => Err("Didn't fail parsing invalid TOML?"),
-            Err(_) => Ok(())
+            Err(_) => Ok(()),
         }
     }
 }
