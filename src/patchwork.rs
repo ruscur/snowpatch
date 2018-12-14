@@ -270,13 +270,12 @@ impl PatchworkServer {
         let encoded = serde_json::to_string(&result).unwrap();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
-        let mut resp = try!(
-            self.client
-                .post(checks_url)
-                .headers(headers)
-                .body(encoded)
-                .send()
-        );
+        let mut resp = try!(self
+            .client
+            .post(checks_url)
+            .headers(headers)
+            .body(encoded)
+            .send());
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         trace!("{}", String::from_utf8(body).unwrap());

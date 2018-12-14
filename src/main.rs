@@ -137,13 +137,13 @@ fn run_tests(
         let build_url_real;
         loop {
             let build_url = jenkins.get_build_url(&res);
-            if let Some(url) = build_url {
+            if let Ok(url) = build_url {
                 build_url_real = url;
                 break;
-            }
+            } // TODO: Handle error
         }
         debug!("Build URL: {}", build_url_real);
-        jenkins.wait_build(&build_url_real);
+        jenkins.wait_build(&build_url_real).unwrap(); // TODO: Error correctly
         let mut test_result = jenkins.get_build_result(&build_url_real).unwrap();
         info!("Jenkins job for {}/{} complete.", branch_name, job.title);
         if test_result == TestState::Fail && job.warn_on_fail {
@@ -231,7 +231,8 @@ fn test_patch(
                             branch_name.to_string(),
                             "apply_patch".to_string(),
                             "Successfully applied".to_string()
-                        ).to_string(),
+                        )
+                        .to_string(),
                     ),
                     context: Some("apply_patch".to_string()),
                     ..Default::default()
@@ -247,7 +248,8 @@ fn test_patch(
                             branch_name.to_string(),
                             "apply_patch".to_string(),
                             "Patch failed to apply".to_string()
-                        ).to_string(),
+                        )
+                        .to_string(),
                     ),
                     context: Some("apply_patch".to_string()),
                     ..Default::default()
@@ -502,7 +504,7 @@ fn run() -> Result<(), Box<Error>> {
 }
 
 fn main() {
-     if let Err(e) = run() {
+    if let Err(e) = run() {
         println!("Error: {}", e);
         process::exit(1);
     }
