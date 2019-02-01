@@ -145,7 +145,7 @@ impl JenkinsBackend {
             .map_err(|e| format!("Couldn't parse JSON from Jenkins: {}", e).into())
     }
 
-    pub fn get_build_url(&self, build_queue_entry: &str) -> Result<String, Box<Error>> {
+    pub fn get_build_handle(&self, build_queue_entry: &str) -> Result<String, Box<Error>> {
         loop {
             let entry = self.get_api_json_object(build_queue_entry)?;
             match entry.get("executable") {
@@ -166,17 +166,17 @@ impl JenkinsBackend {
         }
     }
 
-    pub fn get_build_status(&self, build_url: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
-        match self.get_api_json_object(build_url)?["building"].as_bool() {
+    pub fn get_build_status(&self, build_handle: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
+        match self.get_api_json_object(build_handle)?["building"].as_bool() {
             Some(true) => Ok(JenkinsBuildStatus::Running),
             Some(false) => Ok(JenkinsBuildStatus::Done),
             None => Err("Error getting build status".into()),
         }
     }
 
-    pub fn get_build_result(&self, build_url: &str) -> Result<TestState, Box<Error>> {
+    pub fn get_build_result(&self, build_handle: &str) -> Result<TestState, Box<Error>> {
         match self
-            .get_api_json_object(build_url)?
+            .get_api_json_object(build_handle)?
             .get("result")
             .map(|v| v.as_str().unwrap_or("PENDING"))
         {
@@ -191,11 +191,11 @@ impl JenkinsBackend {
         }
     }
 
-    pub fn get_results_url(&self, build_url: &str, job: &BTreeMap<String, String>) -> String {
-        let default_url = format!("{}/", build_url);
+    pub fn get_results_url(&self, build_handle: &str, job: &BTreeMap<String, String>) -> String {
+        let default_url = format!("{}/", build_handle);
         match job.get("artifact") {
             Some(artifact) => {
-                let artifact_url = format!("{}/artifact/{}", build_url, artifact);
+                let artifact_url = format!("{}/artifact/{}", build_handle, artifact);
                 match self.get_url(&artifact_url) {
                     Ok(mut resp) => match resp.status().is_success() {
                         true => artifact_url,
@@ -210,27 +210,29 @@ impl JenkinsBackend {
 
     pub fn get_description(
         &self,
-        build_url: &str,
+        build_handle: &str,
         job: &BTreeMap<String, String>,
     ) -> Option<String> {
         match job.get("description") {
-            Some(artifact) => match self.get_url(&format!("{}/artifact/{}", build_url, artifact)) {
-                Ok(mut resp) => match resp.status().is_success() {
-                    true => match resp.text() {
-                        Ok(text) => Some(text),
-                        Err(_e) => None,
+            Some(artifact) => {
+                match self.get_url(&format!("{}/artifact/{}", build_handle, artifact)) {
+                    Ok(mut resp) => match resp.status().is_success() {
+                        true => match resp.text() {
+                            Ok(text) => Some(text),
+                            Err(_e) => None,
+                        },
+                        false => None,
                     },
-                    false => None,
-                },
-                Err(_e) => None,
-            },
+                    Err(_e) => None,
+                }
+            }
             None => None,
         }
     }
 
-    pub fn wait_build(&self, build_url: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
+    pub fn wait_build(&self, build_handle: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
         // TODO: Implement a timeout?
-        while self.get_build_status(build_url)? != JenkinsBuildStatus::Done {
+        while self.get_build_status(build_handle)? != JenkinsBuildStatus::Done {
             sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
         }
         Ok(JenkinsBuildStatus::Done)

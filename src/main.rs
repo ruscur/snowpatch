@@ -134,23 +134,23 @@ fn run_tests(
             .start_test(&job.job, jenkins_params)
             .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
         debug!("{:?}", &res);
-        let build_url_real;
+        let build_handle_real;
         loop {
-            let build_url = jenkins.get_build_url(&res);
-            if let Ok(url) = build_url {
-                build_url_real = url;
+            let build_handle = jenkins.get_build_handle(&res);
+            if let Ok(handle) = build_handle {
+                build_handle_real = handle;
                 break;
             } // TODO: Handle error
         }
-        debug!("Build URL: {}", build_url_real);
-        jenkins.wait_build(&build_url_real).unwrap(); // TODO: Error correctly
-        let mut test_result = jenkins.get_build_result(&build_url_real).unwrap();
+        debug!("Build URL: {}", build_handle_real);
+        jenkins.wait_build(&build_handle_real).unwrap(); // TODO: Error correctly
+        let mut test_result = jenkins.get_build_result(&build_handle_real).unwrap();
         info!("Jenkins job for {}/{} complete.", branch_name, job.title);
         if test_result == TestState::Fail && job.warn_on_fail {
             test_result = TestState::Warning;
         }
         results.push(TestResult {
-            description: match jenkins.get_description(&build_url_real, &job.parameters) {
+            description: match jenkins.get_description(&build_handle_real, &job.parameters) {
                 Some(description) => Some(description),
                 None => Some(
                     format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
@@ -158,7 +158,7 @@ fn run_tests(
             },
             state: test_result,
             context: Some(job.title.replace("/", "_")),
-            target_url: Some(jenkins.get_results_url(&build_url_real, &job.parameters)),
+            target_url: Some(jenkins.get_results_url(&build_handle_real, &job.parameters)),
         });
     }
     results
