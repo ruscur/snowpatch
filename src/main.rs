@@ -58,8 +58,11 @@ use std::time::Duration;
 mod patchwork;
 use patchwork::{PatchworkServer, TestResult, TestState};
 
+mod ci;
+use ci::CIBackend;
+
 mod jenkins;
-use jenkins::{CIBackend, JenkinsBackend};
+use jenkins::JenkinsBackend;
 
 mod settings;
 use settings::{Config, Project};

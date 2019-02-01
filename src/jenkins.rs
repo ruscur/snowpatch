@@ -35,18 +35,14 @@ use reqwest::header::{HeaderMap, AUTHORIZATION, LOCATION};
 use reqwest::{Client, IntoUrl, Response};
 use serde_json::{self, Value};
 
+use ci::{BuildStatus, CIBackend};
+
 use patchwork::TestState;
 
 // Constants
 const JENKINS_POLLING_INTERVAL: u64 = 5000; // Polling interval in milliseconds
 
 // Jenkins API definitions
-
-pub trait CIBackend {
-    // TODO: Separate out
-    fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>)
-        -> Result<String, &'static str>;
-}
 
 pub struct JenkinsBackend {
     pub base_url: String,
@@ -83,12 +79,6 @@ impl CIBackend for JenkinsBackend {
             None => Err("No Location header returned"),
         }
     }
-}
-
-#[derive(Eq, PartialEq)]
-pub enum BuildStatus {
-    Running,
-    Done,
 }
 
 impl JenkinsBackend {
