@@ -65,7 +65,7 @@ mod jenkins;
 use jenkins::JenkinsBackend;
 
 mod settings;
-use settings::{Config, Project};
+use settings::{Config, Job, Project};
 
 mod git;
 
@@ -102,6 +102,56 @@ struct Args {
     flag_project: String,
 }
 
+fn run_test(
+    jenkins: &JenkinsBackend,
+    project: &Project,
+    tag: &str,
+    branch_name: &str,
+    job: &Job,
+) -> TestResult {
+    let mut jenkins_params = Vec::<(&str, &str)>::new();
+    for (param_name, param_value) in &job.parameters {
+        // TODO(ajd): do this more neatly
+        debug!("Param name {}, value {}", &param_name, &param_value);
+        jenkins_params.push((param_name, param_value));
+    }
+    jenkins_params.push((&job.remote, &project.remote_uri));
+    jenkins_params.push((&job.branch, tag));
+
+    info!("Starting job: {}", &job.title);
+    let res = jenkins
+        .start_test(&job.job, jenkins_params)
+        .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
+    debug!("{:?}", &res);
+    let build_handle_real;
+    loop {
+        let build_handle = jenkins.get_build_handle(&res);
+        if let Ok(handle) = build_handle {
+            build_handle_real = handle;
+            break;
+        } // TODO: Handle error
+    }
+    debug!("Build URL: {}", build_handle_real);
+    jenkins.wait_build(&build_handle_real).unwrap(); // TODO: Error correctly
+    let mut test_result = jenkins.get_build_result(&build_handle_real).unwrap();
+    info!("Jenkins job for {}/{} complete.", branch_name, job.title);
+    if test_result == TestState::Fail && job.warn_on_fail {
+        test_result = TestState::Warning;
+    }
+
+    TestResult {
+        description: match jenkins.get_description(&build_handle_real, &job.parameters) {
+            Some(description) => Some(description),
+            None => Some(
+                format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
+            ),
+        },
+        state: test_result,
+        context: Some(job.title.replace("/", "_")),
+        target_url: Some(jenkins.get_results_url(&build_handle_real, &job.parameters)),
+    }
+}
+
 fn run_tests(
     settings: &Config,
     client: Arc<Client>,
@@ -123,46 +173,10 @@ fn run_tests(
             debug!("Skipping hefty test {}", job.title);
             continue;
         }
-        let mut jenkins_params = Vec::<(&str, &str)>::new();
-        for (param_name, param_value) in &job.parameters {
-            // TODO(ajd): do this more neatly
-            debug!("Param name {}, value {}", &param_name, &param_value);
-            jenkins_params.push((param_name, param_value));
-        }
-        jenkins_params.push((&job.remote, &project.remote_uri));
-        jenkins_params.push((&job.branch, tag));
 
-        info!("Starting job: {}", &job.title);
-        let res = jenkins
-            .start_test(&job.job, jenkins_params)
-            .unwrap_or_else(|err| panic!("Starting Jenkins test failed: {}", err));
-        debug!("{:?}", &res);
-        let build_handle_real;
-        loop {
-            let build_handle = jenkins.get_build_handle(&res);
-            if let Ok(handle) = build_handle {
-                build_handle_real = handle;
-                break;
-            } // TODO: Handle error
-        }
-        debug!("Build URL: {}", build_handle_real);
-        jenkins.wait_build(&build_handle_real).unwrap(); // TODO: Error correctly
-        let mut test_result = jenkins.get_build_result(&build_handle_real).unwrap();
-        info!("Jenkins job for {}/{} complete.", branch_name, job.title);
-        if test_result == TestState::Fail && job.warn_on_fail {
-            test_result = TestState::Warning;
-        }
-        results.push(TestResult {
-            description: match jenkins.get_description(&build_handle_real, &job.parameters) {
-                Some(description) => Some(description),
-                None => Some(
-                    format!("Test {} on branch {}", job.title, branch_name.to_string()).to_string(),
-                ),
-            },
-            state: test_result,
-            context: Some(job.title.replace("/", "_")),
-            target_url: Some(jenkins.get_results_url(&build_handle_real, &job.parameters)),
-        });
+        let result = run_test(&jenkins, &project, &tag, &branch_name, &job);
+
+        results.push(result);
     }
     results
 }
