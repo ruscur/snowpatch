@@ -14,12 +14,6 @@
 // jenkins.rs - interface to Jenkins REST API
 //
 
-// TODO:
-// * get Jenkins config details from somewhere
-// * get status for the build
-// * get artifacts + console log from completed build (do we make this configurable?)
-// * integrate into snowpatch worker thread
-
 extern crate base64;
 extern crate reqwest;
 extern crate url;
