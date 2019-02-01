@@ -86,7 +86,7 @@ impl CIBackend for JenkinsBackend {
 }
 
 #[derive(Eq, PartialEq)]
-pub enum JenkinsBuildStatus {
+pub enum BuildStatus {
     Running,
     Done,
 }
@@ -166,10 +166,10 @@ impl JenkinsBackend {
         }
     }
 
-    pub fn get_build_status(&self, build_handle: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
+    pub fn get_build_status(&self, build_handle: &str) -> Result<BuildStatus, Box<Error>> {
         match self.get_api_json_object(build_handle)?["building"].as_bool() {
-            Some(true) => Ok(JenkinsBuildStatus::Running),
-            Some(false) => Ok(JenkinsBuildStatus::Done),
+            Some(true) => Ok(BuildStatus::Running),
+            Some(false) => Ok(BuildStatus::Done),
             None => Err("Error getting build status".into()),
         }
     }
@@ -230,11 +230,11 @@ impl JenkinsBackend {
         }
     }
 
-    pub fn wait_build(&self, build_handle: &str) -> Result<JenkinsBuildStatus, Box<Error>> {
+    pub fn wait_build(&self, build_handle: &str) -> Result<BuildStatus, Box<Error>> {
         // TODO: Implement a timeout?
-        while self.get_build_status(build_handle)? != JenkinsBuildStatus::Done {
+        while self.get_build_status(build_handle)? != BuildStatus::Done {
             sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
         }
-        Ok(JenkinsBuildStatus::Done)
+        Ok(BuildStatus::Done)
     }
 }
