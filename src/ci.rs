@@ -14,6 +14,11 @@
 // ci.rs - CI backend interface definitions
 //
 
+use std::collections::BTreeMap;
+use std::error::Error;
+
+use patchwork::TestState;
+
 #[derive(Eq, PartialEq)]
 pub enum BuildStatus {
     Running,
@@ -23,4 +28,10 @@ pub enum BuildStatus {
 pub trait CIBackend {
     fn start_test(&self, job_name: &str, params: Vec<(&str, &str)>)
         -> Result<String, &'static str>;
+    fn get_build_handle(&self, build_queue_entry: &str) -> Result<String, Box<Error>>;
+    fn get_build_result(&self, build_handle: &str) -> Result<TestState, Box<Error>>;
+    fn get_results_url(&self, build_handle: &str, job: &BTreeMap<String, String>) -> String;
+    fn get_description(&self, build_handle: &str, job: &BTreeMap<String, String>)
+        -> Option<String>;
+    fn wait_build(&self, build_handle: &str) -> Result<BuildStatus, Box<Error>>;
 }
