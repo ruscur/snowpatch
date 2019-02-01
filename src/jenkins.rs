@@ -101,7 +101,8 @@ impl JenkinsBackend {
                     format!(
                         "Basic {}",
                         base64::encode(&format!("{}:{}", username, token))
-                    ).parse()
+                    )
+                    .parse()
                     .unwrap(),
                 );
             }
