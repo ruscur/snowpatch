@@ -114,6 +114,8 @@ subscribe, go to the
 Patches are tracked on
 [patchwork.ozlabs.org](https://patchwork.ozlabs.org/project/snowpatch/).
 
+Our IRC channel is #snowpatch on [Freenode](https://freenode.net).
+
 snowpatch is maintained by
 [Russell Currey](mailto:ruscur@russell.cc) and
 [Andrew Donnellan](mailto:andrew.donnellan@au1.ibm.com).
