@@ -26,6 +26,7 @@ description = "continuous integration for patch-based workflows"
 readme = "README.md"
 license = "GPL-2.0+"
 keywords = ["CI", "patch", "patchwork", "jenkins", "git"]
+build = "build.rs"
 
 [dependencies]
 reqwest = "0.9"
@@ -40,3 +41,6 @@ docopt = "1.0"
 log = "0.4"
 env_logger = "0.5"
 base64 = "0.9"
+
+[build-dependencies]
+vergen = "3"

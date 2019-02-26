@@ -317,9 +317,9 @@ fn run() -> Result<(), Box<Error>> {
     log_builder.init();
 
     let version = format!(
-        "{} version {}",
+        "{} version: {}",
         env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION")
+        env!("VERGEN_SEMVER_LIGHTWEIGHT")
     );
 
     let args: Args = Docopt::new(USAGE)
