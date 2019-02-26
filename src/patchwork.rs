@@ -39,7 +39,7 @@ use utils;
 
 // TODO: more constants.  constants for format strings of URLs and such.
 pub static PATCHWORK_API: &'static str = "/api/1.0";
-pub static PATCHWORK_QUERY: &'static str = "?order=-id";
+pub static PATCHWORK_QUERY: &'static str = "?order=-id&count=500";
 
 #[derive(Deserialize, Clone)]
 pub struct SubmitterSummary {
@@ -243,7 +243,8 @@ impl PatchworkServer {
                     format!(
                         "Basic {}",
                         base64::encode(&format!("{}:{}", username, password))
-                    ).parse()
+                    )
+                    .parse()
                     .unwrap(),
                 );
             }
@@ -310,15 +311,15 @@ impl PatchworkServer {
 
     fn get_next_link(&self, _resp: &Response) -> Option<String> {
         /*
-        let next = resp.headers().get(LINK)?;
-        for val in next.values() {
-            if let Some(rel) = val.rel() {
-                if rel.iter().any(|reltype| reltype == &RelationType::Next) {
-                    return Some(val.link().to_string());
+                let next = resp.headers().get(LINK)?;
+                for val in next.values() {
+                    if let Some(rel) = val.rel() {
+                        if rel.iter().any(|reltype| reltype == &RelationType::Next) {
+                            return Some(val.link().to_string());
+                        }
+                    }
                 }
-            }
-        }
-*/
+        */
         None
     }
 
