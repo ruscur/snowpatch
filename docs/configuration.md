@@ -159,6 +159,9 @@ Individual jobs contain the following:
 - `branch`: the name of the Jenkins build parameter in which the name of the git
   branch to which the patch has been applied will be filled
 
+- `base`: the name of the Jenkins build parameter in which the commit ID on top
+  of which the patch has been applied will be filled (Optional)
+
 - `hefty`: whether this job is a "hefty" test. Hefty tests will only be run on
   the final patch of a series, while non-hefty tests will be run on every patch
   in the series. (Optional, defaults to false)

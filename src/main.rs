@@ -107,6 +107,7 @@ fn run_test(
     project: &Project,
     tag: &str,
     branch_name: &str,
+    base: &str,
     job: &Job,
 ) -> TestResult {
     let mut params = Vec::<(&str, &str)>::new();
@@ -117,6 +118,10 @@ fn run_test(
     }
     params.push((&job.remote, &project.remote_uri));
     params.push((&job.branch, tag));
+    match job.base {
+        Some(ref base_param) => params.push((&base_param, base)),
+        _ => { }
+    };
 
     info!("Starting job: {}", &job.title);
     let res = backend
@@ -158,6 +163,7 @@ fn run_tests(
     project: &Project,
     tag: &str,
     branch_name: &str,
+    base: &str,
     hefty_tests: bool,
 ) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
@@ -174,7 +180,7 @@ fn run_tests(
             continue;
         }
 
-        let result = run_test(&jenkins, &project, &tag, &branch_name, &job);
+        let result = run_test(&jenkins, &project, &tag, &branch_name, &base, &job);
 
         results.push(result);
     }
@@ -277,11 +283,12 @@ fn test_patch(
         let project = project.clone();
         let client = client.clone();
         let test_all_branches = project.test_all_branches.unwrap_or(true);
+        let base = commit.id().to_string();
 
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new()
             .name(tag.to_string())
-            .spawn(move || run_tests(&settings, client, &project, &tag, &branch_name, hefty_tests))
+            .spawn(move || run_tests(&settings, client, &project, &tag, &branch_name, &base, hefty_tests))
             .unwrap();
         results.append(&mut test.join().unwrap());
 

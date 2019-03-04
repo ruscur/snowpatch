@@ -47,6 +47,7 @@ token = "33333333333333333333333333333333"
         job = "skiboot-compile-test-snowpatch"
         remote = "GIT_REPO"
         branch = "GIT_REF"
+        base = "GIT_BASE"
 
         [[projects.skiboot.jobs]]
         job = "skiboot-boot-test-snowpatch"
