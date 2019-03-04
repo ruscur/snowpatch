@@ -244,10 +244,9 @@ fn test_patch(
                     state: TestState::Success,
                     description: Some(
                         format!(
-                            "{}/{}\n\n{}",
+                            "Successfully applied on branch {} ({})",
                             branch_name.to_string(),
-                            "apply_patch".to_string(),
-                            "Successfully applied".to_string()
+                            commit.id().to_string()
                         )
                         .to_string(),
                     ),
@@ -261,10 +260,9 @@ fn test_patch(
                     state: TestState::Warning,
                     description: Some(
                         format!(
-                            "{}/{}\n\n{}",
+                            "Failed to apply on branch {} ({})",
                             branch_name.to_string(),
-                            "apply_patch".to_string(),
-                            "Patch failed to apply".to_string()
+                            commit.id().to_string()
                         )
                         .to_string(),
                     ),
