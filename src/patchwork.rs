@@ -45,7 +45,7 @@ pub static PATCHWORK_QUERY: &'static str = "?order=-id&count=500";
 pub struct SubmitterSummary {
     pub id: u64,
     pub url: String,
-    pub name: String,
+    pub name: Option<String>,
     pub email: String,
 }
 
