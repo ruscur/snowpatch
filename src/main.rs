@@ -398,7 +398,12 @@ fn run() -> Result<(), Box<Error>> {
                 } else {
                     patchwork.get_patch_mbox(&patch)
                 };
-                test_patch(&settings, &client, &project, &mbox, true);
+                let results = test_patch(&settings, &client, &project, &mbox, true);
+                if project.push_results {
+                    for result in results {
+                        patchwork.post_test_result(&result, &patch.checks).unwrap();
+                    }
+                }
             }
         }
         return Ok(());
