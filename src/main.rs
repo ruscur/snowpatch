@@ -208,6 +208,9 @@ fn test_patch(
     push_opts.remote_callbacks(push_callbacks);
 
     let mut successfully_applied = false;
+
+    let mut test_threads = vec![];
+
     for branch_name in project.branches.clone() {
         let tag = format!("{}_{}", tag, branch_name);
         info!("Configuring local branch for {}.", tag);
@@ -285,28 +288,37 @@ fn test_patch(
         let base = commit.id().to_string();
 
         // We've set up a remote branch, time to kick off tests
-        let test = thread::Builder::new()
-            .name(tag.to_string())
-            .spawn(move || {
-                run_tests(
-                    &settings,
-                    client,
-                    &project,
-                    &tag,
-                    &branch_name,
-                    &base,
-                    hefty_tests,
-                )
-            })
-            .unwrap();
-        results.append(&mut test.join().unwrap());
+        let test = thread::Builder::new().name(tag.to_string()).spawn(move || {
+            run_tests(
+                &settings,
+                client,
+                &project,
+                &tag,
+                &branch_name,
+                &base,
+                hefty_tests,
+            )
+        });
 
-        // Delete the remote branch now it's not needed any more
-        git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
+        match test {
+            Ok(thread) => test_threads.push((thread, branch)),
+            Err(e) => {
+                error!("Error spawning thread: {}", e);
+                git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
+            }
+        }
 
         if !test_all_branches {
             break;
         }
+    }
+
+    // Wait for results
+    for (thread, branch) in test_threads {
+        results.append(&mut thread.join().unwrap());
+
+        // Delete the remote branch now it's not needed any more
+        git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
     }
 
     if !successfully_applied {
