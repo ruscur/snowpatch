@@ -325,11 +325,12 @@ fn test_patch(
     allow(clippy::cyclomatic_complexity, clippy::cognitive_complexity)
 )]
 fn run() -> Result<(), Box<Error>> {
+    // TODO: env_logger probably has a neater way to set defaults
     let mut log_builder = Builder::new();
     // By default, log at the "info" level for every module
     log_builder.filter(None, LevelFilter::Info);
     if let Ok(log_env) = env::var("RUST_LOG") {
-        log_builder.parse(&log_env);
+        log_builder.parse_filters(&log_env);
     }
     log_builder.init();
 
