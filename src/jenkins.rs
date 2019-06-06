@@ -118,7 +118,7 @@ impl CIBackend for JenkinsBackend {
             Some(artifact) => {
                 let artifact_url = format!("{}/artifact/{}", build_handle, artifact);
                 match self.get_url(&artifact_url) {
-                    Ok(mut resp) => match resp.status().is_success() {
+                    Ok(resp) => match resp.status().is_success() {
                         true => artifact_url,
                         false => default_url,
                     },
