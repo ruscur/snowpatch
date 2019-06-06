@@ -118,10 +118,9 @@ fn run_test(
     }
     params.push((&job.remote, &project.remote_uri));
     params.push((&job.branch, tag));
-    match job.base {
-        Some(ref base_param) => params.push((&base_param, base)),
-        _ => { }
-    };
+    if let Some(ref base_param) = job.base {
+        params.push((&base_param, base));
+    }
 
     info!("Starting job: {}", &job.title);
     let res = backend
@@ -288,7 +287,17 @@ fn test_patch(
         // We've set up a remote branch, time to kick off tests
         let test = thread::Builder::new()
             .name(tag.to_string())
-            .spawn(move || run_tests(&settings, client, &project, &tag, &branch_name, &base, hefty_tests))
+            .spawn(move || {
+                run_tests(
+                    &settings,
+                    client,
+                    &project,
+                    &tag,
+                    &branch_name,
+                    &base,
+                    hefty_tests,
+                )
+            })
             .unwrap();
         results.append(&mut test.join().unwrap());
 
@@ -311,7 +320,10 @@ fn test_patch(
     results
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(cyclomatic_complexity))]
+#[cfg_attr(
+    feature = "cargo-clippy",
+    allow(clippy::cyclomatic_complexity, clippy::cognitive_complexity)
+)]
 fn run() -> Result<(), Box<Error>> {
     let mut log_builder = Builder::new();
     // By default, log at the "info" level for every module

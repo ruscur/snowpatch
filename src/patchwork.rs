@@ -210,8 +210,7 @@ pub struct PatchworkServer {
 }
 
 impl PatchworkServer {
-    #[cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
-    pub fn new(url: &String, client: &std::sync::Arc<Client>) -> PatchworkServer {
+    pub fn new(url: &str, client: &std::sync::Arc<Client>) -> PatchworkServer {
         let mut headers = HeaderMap::new();
         // These .parse().unwrap() blocks are making sure it's a valid ASCII
         // header value.  They don't need to be refactored and hopefully in
@@ -219,13 +218,13 @@ impl PatchworkServer {
         headers.insert(ACCEPT, "application/json".parse().unwrap());
         headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
         PatchworkServer {
-            url: url.clone(),
+            url: url.to_string(),
             client: client.clone(),
             headers,
         }
     }
 
-    #[cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::ptr_arg))]
     pub fn set_authentication(
         &mut self,
         username: &Option<String>,

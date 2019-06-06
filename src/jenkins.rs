@@ -118,10 +118,13 @@ impl CIBackend for JenkinsBackend {
             Some(artifact) => {
                 let artifact_url = format!("{}/artifact/{}", build_handle, artifact);
                 match self.get_url(&artifact_url) {
-                    Ok(resp) => match resp.status().is_success() {
-                        true => artifact_url,
-                        false => default_url,
-                    },
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            artifact_url
+                        } else {
+                            default_url
+                        }
+                    }
                     Err(_e) => default_url,
                 }
             }
@@ -137,13 +140,16 @@ impl CIBackend for JenkinsBackend {
         match job.get("description") {
             Some(artifact) => {
                 match self.get_url(&format!("{}/artifact/{}", build_handle, artifact)) {
-                    Ok(mut resp) => match resp.status().is_success() {
-                        true => match resp.text() {
-                            Ok(text) => Some(text),
-                            Err(_e) => None,
-                        },
-                        false => None,
-                    },
+                    Ok(mut resp) => {
+                        if resp.status().is_success() {
+                            match resp.text() {
+                                Ok(text) => Some(text),
+                                Err(_e) => None,
+                            }
+                        } else {
+                            None
+                        }
+                    }
                     Err(_e) => None,
                 }
             }

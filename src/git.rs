@@ -68,7 +68,7 @@ pub fn pull(repo: &Repository) -> Result<Output, &'static str> {
     }
 }
 
-pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
+pub fn checkout_branch(repo: &Repository, branch: &str) {
     let workdir = repo.workdir().unwrap(); // TODO: support bare repositories
 
     // Make sure there's no junk lying around before we switch
@@ -107,7 +107,6 @@ pub fn checkout_branch(repo: &Repository, branch: &str) -> () {
         .current_dir(&workdir)
         .output()
         .unwrap();
-    ()
 }
 
 pub fn apply_patch(repo: &Repository, path: &Path) -> Result<Output, &'static str> {
