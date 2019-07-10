@@ -41,6 +41,7 @@ token = "33333333333333333333333333333333"
     test_all_branches = false
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/skiboot.git"
+    base_remote_name = "origin"
     push_results = false
 
         [[projects.skiboot.jobs]]
@@ -61,6 +62,7 @@ token = "33333333333333333333333333333333"
     # test_all_branches defaults to true
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/linux.git"
+    base_remote_name = "origin"
     push_results = false
 
         [[projects.linuxppc-dev.jobs]]

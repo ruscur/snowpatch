@@ -111,6 +111,7 @@ Example:
     # test_all_branches defaults to true
     remote_name = "github"
     remote_uri = "git@github.com:ruscur/linux.git"
+    base_remote_name = "origin"
     push_results = false
 
         [[projects.linuxppc-dev.jobs]]
@@ -132,8 +133,7 @@ Example:
 
 - `repository`: path to local clone of git repository
 
-- `branches`: a list of base branches (as defined by the local git repository)
-  that patches should be tested against
+- `branches`: a list of base branches that patches should be tested against
 
 - `test_all_branches`: if true, each patch will be tested against all base
   branches. If false, a patch will only be tested against the first base branch
@@ -143,6 +143,9 @@ Example:
   to which branches should be pushed so that the Jenkins server can pull them
 
 - `remote_uri`: the URI of the remote
+
+- `base_remote_name`: the name of the remote where base branches are retrieved
+  from (Optional, defaults to value of remote_name)
 
 - `push_results`: whether test results should be pushed to Patchwork for this project
 

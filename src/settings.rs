@@ -65,6 +65,7 @@ pub struct Project {
     pub test_all_branches: Option<bool>,
     pub remote_name: String,
     pub remote_uri: String,
+    pub base_remote_name: Option<String>,
     pub jobs: Vec<Job>,
     pub push_results: bool,
     pub category: Option<String>,

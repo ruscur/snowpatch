@@ -34,7 +34,7 @@ extern crate base64;
 extern crate serde_json;
 extern crate toml;
 
-use git2::{BranchType, PushOptions, RemoteCallbacks};
+use git2::{FetchOptions, PushOptions, RemoteCallbacks};
 
 use reqwest::{Client, Proxy};
 
@@ -200,12 +200,21 @@ fn test_patch(
     }
     let tag = utils::sanitise_path(path.file_name().unwrap().to_str().unwrap());
     let mut remote = repo.find_remote(&project.remote_name).unwrap();
+    let mut base_remote = repo
+        .find_remote(match &project.base_remote_name {
+            Some(name) => &name,
+            _ => &project.remote_name,
+        })
+        .unwrap();
 
     let mut push_callbacks = RemoteCallbacks::new();
     push_callbacks.credentials(|_, _, _| git::cred_from_settings(&settings.git));
-
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(push_callbacks);
+    let mut fetch_callbacks = RemoteCallbacks::new();
+    fetch_callbacks.credentials(|_, _, _| git::cred_from_settings(&settings.git));
+    let mut fetch_opts = FetchOptions::new();
+    fetch_opts.remote_callbacks(fetch_callbacks);
 
     let mut successfully_applied = false;
 
@@ -214,20 +223,18 @@ fn test_patch(
     for branch_name in project.branches.clone() {
         let tag = format!("{}_{}", tag, branch_name);
         info!("Configuring local branch for {}.", tag);
-        debug!("Switching to base branch {}...", branch_name);
-        git::checkout_branch(&repo, &branch_name);
 
-        // Make sure we're up to date
-        git::pull(&repo).unwrap();
+        debug!("Updating base branch {}...", branch_name);
+        git::fetch_branch(&mut base_remote, &branch_name, Some(&mut fetch_opts))
+            .unwrap_or_else(|err| panic!("Couldn't fetch branch: {}", err));
 
         debug!("Creating a new branch...");
-        let commit = git::get_latest_commit(&repo);
-        let mut branch = repo.branch(&tag, &commit, true).unwrap();
+        let branch = git::create_branch(&repo, &tag, &base_remote, &branch_name)
+            .unwrap_or_else(|err| panic!("Couldn't create branch: {}", err));
+
         debug!("Switching to branch...");
-        repo.set_head(branch.get().name().unwrap())
-            .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
-        repo.checkout_head(None)
-            .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
+        git::checkout_branch(&repo, branch.get().name().unwrap());
+        let commit = git::get_latest_commit(&repo);
         debug!(
             "Repo is now at head {}",
             repo.head().unwrap().name().unwrap()
@@ -239,11 +246,9 @@ fn test_patch(
             git::push_to_remote(&mut remote, &branch, false, &mut push_opts).unwrap();
         }
 
-        git::checkout_branch(&repo, &branch_name);
-        // we need to find the branch again since its head has moved
-        branch = repo.find_branch(&tag, BranchType::Local).unwrap();
-        branch.delete().unwrap();
-        debug!("Repo is back to {}", repo.head().unwrap().name().unwrap());
+        git::delete_branch(&repo, &tag).unwrap_or_else(|err| {
+            panic!("Couldn't delete branch: {}", err);
+        });
 
         match output {
             Ok(_) => {

@@ -15,7 +15,9 @@
 //
 
 use git2::build::CheckoutBuilder;
-use git2::{Branch, Commit, Cred, Error, PushOptions, Remote, Repository};
+use git2::{
+    Branch, BranchType, Commit, Cred, Error, FetchOptions, PushOptions, Remote, Repository,
+};
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -47,25 +49,37 @@ pub fn push_to_remote(
     remote.push(refspecs, Some(&mut opts))
 }
 
-// TODO: rewrite this to use git2-rs, I think it's impossible currently
-pub fn pull(repo: &Repository) -> Result<Output, &'static str> {
-    let workdir = repo.workdir().unwrap(); // TODO: support bare repositories
+pub fn fetch_branch(
+    remote: &mut Remote,
+    branch: &str,
+    opts: Option<&mut FetchOptions>,
+) -> Result<(), Error> {
+    remote.fetch(&[branch], opts, None)
+}
 
-    let output = Command::new("git")
-        .arg("pull") // pull the cool kid's way
-        .current_dir(&workdir) // in the repo's working directory
-        .output() // run synchronously
-        .unwrap(); // TODO
+pub fn create_branch<'a>(
+    repo: &'a Repository,
+    branch_name: &str,
+    base_remote: &Remote,
+    target_ref: &str,
+) -> Result<Branch<'a>, Error> {
+    let base_branch = repo.find_branch(
+        &format!("{}/{}", base_remote.name().unwrap(), target_ref),
+        BranchType::Remote,
+    )?;
+    let commit = base_branch.get().peel_to_commit()?;
 
-    if output.status.success() {
-        debug!(
-            "Pull: {}",
-            String::from_utf8(output.clone().stdout).unwrap()
-        );
-        Ok(output)
-    } else {
-        Err("Error: couldn't pull changes")
+    let _ = delete_branch(repo, branch_name);
+    repo.branch(branch_name, &commit, true)
+}
+
+pub fn delete_branch(repo: &Repository, branch_name: &str) -> Result<(), Error> {
+    let mut branch = repo.find_branch(branch_name, BranchType::Local)?;
+    if branch.is_head() {
+        debug!("Detaching HEAD");
+        repo.set_head_detached(repo.head()?.target().unwrap())?;
     }
+    branch.delete()
 }
 
 pub fn checkout_branch(repo: &Repository, branch: &str) {
@@ -87,7 +101,7 @@ pub fn checkout_branch(repo: &Repository, branch: &str) {
         .output()
         .unwrap();
 
-    repo.set_head(&format!("{}/{}", GIT_REF_BASE, &branch))
+    repo.set_head(&branch)
         .unwrap_or_else(|err| panic!("Couldn't set HEAD: {}", err));
     repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
         .unwrap_or_else(|err| panic!("Couldn't checkout HEAD: {}", err));
