@@ -74,7 +74,7 @@ impl CIBackend for JenkinsBackend {
         }
     }
 
-    fn get_build_handle(&self, build_queue_entry: &str) -> Result<String, Box<Error>> {
+    fn get_build_handle(&self, build_queue_entry: &str) -> Result<String, Box<dyn Error>> {
         loop {
             let entry = self.get_api_json_object(build_queue_entry)?;
             match entry.get("executable") {
@@ -95,7 +95,7 @@ impl CIBackend for JenkinsBackend {
         }
     }
 
-    fn get_build_result(&self, build_handle: &str) -> Result<TestState, Box<Error>> {
+    fn get_build_result(&self, build_handle: &str) -> Result<TestState, Box<dyn Error>> {
         match self
             .get_api_json_object(build_handle)?
             .get("result")
@@ -157,7 +157,7 @@ impl CIBackend for JenkinsBackend {
         }
     }
 
-    fn wait_build(&self, build_handle: &str) -> Result<BuildStatus, Box<Error>> {
+    fn wait_build(&self, build_handle: &str) -> Result<BuildStatus, Box<dyn Error>> {
         // TODO: Implement a timeout?
         while self.get_build_status(build_handle)? != BuildStatus::Done {
             sleep(Duration::from_millis(JENKINS_POLLING_INTERVAL));
@@ -193,7 +193,7 @@ impl JenkinsBackend {
         self.reqwest_client.post(url).headers(self.headers()).send()
     }
 
-    fn get_api_json_object(&self, base_url: &str) -> Result<Value, Box<Error>> {
+    fn get_api_json_object(&self, base_url: &str) -> Result<Value, Box<dyn Error>> {
         let url = format!("{}api/json", base_url);
         let mut result_str = String::new();
         loop {
@@ -220,7 +220,7 @@ impl JenkinsBackend {
             .map_err(|e| format!("Couldn't parse JSON from Jenkins: {}", e).into())
     }
 
-    pub fn get_build_status(&self, build_handle: &str) -> Result<BuildStatus, Box<Error>> {
+    pub fn get_build_status(&self, build_handle: &str) -> Result<BuildStatus, Box<dyn Error>> {
         match self.get_api_json_object(build_handle)?["building"].as_bool() {
             Some(true) => Ok(BuildStatus::Running),
             Some(false) => Ok(BuildStatus::Done),

@@ -103,7 +103,7 @@ struct Args {
 }
 
 fn run_test(
-    backend: &CIBackend,
+    backend: &dyn CIBackend,
     project: &Project,
     tag: &str,
     branch_name: &str,
@@ -324,7 +324,7 @@ fn test_patch(
     feature = "cargo-clippy",
     allow(clippy::cyclomatic_complexity, clippy::cognitive_complexity)
 )]
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     // TODO: env_logger probably has a neater way to set defaults
     let mut log_builder = Builder::new();
     // By default, log at the "info" level for every module

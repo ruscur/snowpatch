@@ -196,7 +196,7 @@ pub struct Config {
     pub projects: BTreeMap<String, Project>,
 }
 
-pub fn parse(path: &str) -> Result<Config, Box<Error>> {
+pub fn parse(path: &str) -> Result<Config, Box<dyn Error>> {
     let mut toml_config = String::new();
 
     File::open(&path)
@@ -223,7 +223,7 @@ mod test {
     }
 
     #[test]
-    fn parse_example_openpower() -> Result<(), Box<Error>> {
+    fn parse_example_openpower() -> Result<(), Box<dyn Error>> {
         parse("examples/openpower.toml").map(|_| ())
     }
 
