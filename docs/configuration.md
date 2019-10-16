@@ -147,7 +147,21 @@ Example:
 - `base_remote_name`: the name of the remote where base branches are retrieved
   from (Optional, defaults to value of remote_name)
 
-- `push_results`: whether test results should be pushed to Patchwork for this project
+- `push_results`: whether test results should be pushed to Patchwork for this
+  project
+
+- `branch_preserve_policy`: set the policy for how snowpatch will handle
+  branches on git remotes after tests have run.
+
+  "ALL": preserves all branches on the remote.
+  "SERIES": only preserves full series or standalone patches.
+  "NONE": deletes branches on the remote after testing.
+
+  (Optional, defaults to NONE)
+
+- `branch_preserve_remote`: only valid if `branch_preserve_policy` is not NONE.
+  Specify the name of a git remote that will only be used for branch
+  preservation.  If set, branches will be deleted on the main remote. (Optional)
 
 Individual jobs contain the following:
 

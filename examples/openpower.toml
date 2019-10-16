@@ -43,6 +43,8 @@ token = "33333333333333333333333333333333"
     remote_uri = "git@github.com:ruscur/skiboot.git"
     base_remote_name = "origin"
     push_results = false
+    branch_preserve_policy = "SERIES" # defaults to NONE
+    branch_preserve_remote = "gitlab" # branch to push to, but not delete from
 
         [[projects.skiboot.jobs]]
         job = "skiboot-compile-test-snowpatch"
