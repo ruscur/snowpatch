@@ -65,7 +65,7 @@ mod jenkins;
 use jenkins::JenkinsBackend;
 
 mod settings;
-use settings::{Config, Job, Project};
+use settings::{BranchPreservePolicy, Config, Job, Project};
 
 mod git;
 
@@ -194,6 +194,9 @@ fn test_patch(
     hefty_tests: bool,
 ) -> Vec<TestResult> {
     let repo = project.get_repo().unwrap();
+    let preserve_policy = project
+        .branch_preserve_policy
+        .unwrap_or(BranchPreservePolicy::None);
     let mut results: Vec<TestResult> = Vec::new();
     if !path.is_file() {
         return results;
@@ -206,6 +209,7 @@ fn test_patch(
             _ => &project.remote_name,
         })
         .unwrap();
+    let preserve_remote = &project.branch_preserve_remote;
 
     let mut push_callbacks = RemoteCallbacks::new();
     push_callbacks.credentials(|_, _, _| git::cred_from_settings(&settings.git));
@@ -244,6 +248,18 @@ fn test_patch(
 
         if output.is_ok() {
             git::push_to_remote(&mut remote, &branch, false, &mut push_opts).unwrap();
+            if preserve_remote.is_some()
+                && (preserve_policy == BranchPreservePolicy::All
+                    || (preserve_policy == BranchPreservePolicy::Series && hefty_tests))
+            {
+                git::push_to_remote(
+                    &mut repo.find_remote(preserve_remote.as_ref().unwrap()).unwrap(),
+                    &branch,
+                    false,
+                    &mut push_opts,
+                )
+                .unwrap();
+            }
         }
 
         git::delete_branch(&repo, &tag).unwrap_or_else(|err| {
@@ -290,6 +306,7 @@ fn test_patch(
         let project = project.clone();
         let client = client.clone();
         let test_all_branches = project.test_all_branches.unwrap_or(true);
+
         let base = commit.id().to_string();
 
         // We've set up a remote branch, time to kick off tests
@@ -309,7 +326,12 @@ fn test_patch(
             Ok(thread) => test_threads.push((thread, branch)),
             Err(e) => {
                 error!("Error spawning thread: {}", e);
-                git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
+                if preserve_remote.is_some()
+                    || preserve_policy == BranchPreservePolicy::None
+                    || (preserve_policy == BranchPreservePolicy::Series && !hefty_tests)
+                {
+                    git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
+                }
             }
         }
 
@@ -323,7 +345,12 @@ fn test_patch(
         results.append(&mut thread.join().unwrap());
 
         // Delete the remote branch now it's not needed any more
-        git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
+        if preserve_remote.is_some()
+            || preserve_policy == BranchPreservePolicy::None
+            || (preserve_policy == BranchPreservePolicy::Series && !hefty_tests)
+        {
+            git::push_to_remote(&mut remote, &branch, true, &mut push_opts).unwrap();
+        }
     }
 
     if !successfully_applied {

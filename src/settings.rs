@@ -29,6 +29,13 @@ use std::io::Read;
 
 // TODO: Give more informative error messages when we fail to parse.
 
+#[derive(Deserialize, Clone, PartialEq, Copy)]
+pub enum BranchPreservePolicy {
+    All,
+    Series,
+    None,
+}
+
 #[derive(Deserialize, Clone)]
 pub struct Git {
     pub user: String,
@@ -68,6 +75,10 @@ pub struct Project {
     pub base_remote_name: Option<String>,
     pub jobs: Vec<Job>,
     pub push_results: bool,
+    #[serde(default)] // necessary for serde to treat as optional
+    #[serde(deserialize_with = "parse_preserve_policy")]
+    pub branch_preserve_policy: Option<BranchPreservePolicy>,
+    pub branch_preserve_remote: Option<String>,
     pub category: Option<String>,
 }
 
@@ -87,6 +98,22 @@ pub struct Job {
     pub hefty: bool,
     pub warn_on_fail: bool,
     pub parameters: BTreeMap<String, String>,
+}
+
+fn parse_preserve_policy<'de, D>(deserializer: D) -> Result<Option<BranchPreservePolicy>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    match s.as_ref() {
+        "ALL" => Ok(Some(BranchPreservePolicy::All)),
+        "SERIES" => Ok(Some(BranchPreservePolicy::Series)),
+        "NONE" => Ok(Some(BranchPreservePolicy::None)),
+        _ => Err(serde::de::Error::custom(
+            "branch_preserve_policy not one of ALL, SERIES, NONE",
+        )),
+    }
 }
 
 impl<'de> Deserialize<'de> for Job {
