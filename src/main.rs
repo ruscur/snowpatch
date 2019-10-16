@@ -306,6 +306,7 @@ fn test_patch(
         let project = project.clone();
         let client = client.clone();
         let test_all_branches = project.test_all_branches.unwrap_or(true);
+
         let base = commit.id().to_string();
 
         // We've set up a remote branch, time to kick off tests
