@@ -36,12 +36,24 @@ pub enum BranchPreservePolicy {
     None,
 }
 
+#[derive(Deserialize, Clone, PartialEq, Copy)]
+pub enum EmailReportPolicy {
+    Always,
+    Errors,
+    Never,
+}
+
 #[derive(Deserialize, Clone)]
 pub struct Git {
     pub user: String,
     pub public_key: Option<String>,
     pub private_key: String,
     pub passphrase: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Email {
+    pub from: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -79,6 +91,9 @@ pub struct Project {
     #[serde(deserialize_with = "parse_preserve_policy")]
     pub branch_preserve_policy: Option<BranchPreservePolicy>,
     pub branch_preserve_remote: Option<String>,
+    #[serde(default)] // necessary for serde to treat as optional
+    #[serde(deserialize_with = "parse_email_policy")]
+    pub email_report_policy: Option<EmailReportPolicy>,
     pub category: Option<String>,
 }
 
@@ -112,6 +127,22 @@ where
         "NONE" => Ok(Some(BranchPreservePolicy::None)),
         _ => Err(serde::de::Error::custom(
             "branch_preserve_policy not one of ALL, SERIES, NONE",
+        )),
+    }
+}
+
+fn parse_email_policy<'de, D>(deserializer: D) -> Result<Option<EmailReportPolicy>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    match s.as_ref() {
+        "ALWAYS" => Ok(Some(EmailReportPolicy::Always)),
+        "ERRORS" => Ok(Some(EmailReportPolicy::Errors)),
+        "NEVER" => Ok(Some(EmailReportPolicy::Never)),
+        _ => Err(serde::de::Error::custom(
+            "email_report_policy not one of ALWAYS, ERRORS, NEVER",
         )),
     }
 }
@@ -219,6 +250,7 @@ impl<'de> Deserialize<'de> for Job {
 #[derive(Deserialize, Clone)]
 pub struct Config {
     pub git: Git,
+    pub email: Option<Email>,
     pub patchwork: Patchwork,
     pub jenkins: Jenkins,
     pub projects: BTreeMap<String, Project>,

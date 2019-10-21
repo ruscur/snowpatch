@@ -162,6 +162,21 @@ Example:
 - `branch_preserve_remote`: only valid if `branch_preserve_policy` is not NONE.
   Specify the name of a git remote that will only be used for branch
   preservation.  If set, branches will be deleted on the main remote. (Optional)
+  
+- `email_report_policy`: set the policy for how snowpatch will handle reporting
+  test results directly to the mailing lists.
+  
+  "ALWAYS": always sends a summary email to either the cover letter or first letter of
+  the series, whether tests have passed or failed.
+  "ERRORS": only sends a summary email if a test has failed.
+  "NEVER": never sends email.
+  
+  If value is something other than "NEVER", you must have a SMTP server running
+  on localhost:25 that allows unauthenticated access.  See email.md for an
+  example of how to set this up as a relay to a remote SMTP server.
+  
+  Mail is only sent in daemon mode, and only if `push_results` is set.
+  (Optional, defaults to NEVER)
 
 Individual jobs contain the following:
 

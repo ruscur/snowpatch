@@ -31,6 +31,8 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate base64;
+extern crate lettre;
+extern crate lettre_email;
 extern crate serde_json;
 extern crate toml;
 
@@ -65,11 +67,13 @@ mod jenkins;
 use jenkins::JenkinsBackend;
 
 mod settings;
-use settings::{BranchPreservePolicy, Config, Job, Project};
+use settings::{BranchPreservePolicy, Config, EmailReportPolicy, Job, Project};
 
 mod git;
 
 mod utils;
+
+mod email;
 
 static USAGE: &'static str = "
 Usage:
@@ -471,7 +475,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 fs::remove_dir_all(mbox.parent().unwrap())
                     .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
                 if project.push_results {
-                    for result in results {
+                    for result in &results {
                         patchwork.post_test_result(&result, &patch.checks).unwrap();
                     }
                 }
@@ -572,8 +576,21 @@ fn run() -> Result<(), Box<dyn Error>> {
             fs::remove_dir_all(mbox.parent().unwrap())
                 .unwrap_or_else(|err| error!("Couldn't delete temp directory: {}", err));
             if project.push_results {
-                for result in results {
+                for result in &results {
                     patchwork.post_test_result(&result, &patch.checks).unwrap();
+                }
+                if let Some(email_settings) = &settings.email {
+                    if let Some(EmailReportPolicy::Always) = project.email_report_policy {
+                        email::send_series_results(&patch, results, email_settings).unwrap();
+                    } else if let Some(EmailReportPolicy::Errors) = project.email_report_policy {
+                        for result in &results {
+                            if result.state == TestState::Fail {
+                                email::send_series_results(&patch, results, email_settings)
+                                    .unwrap();
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }

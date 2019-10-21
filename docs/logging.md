@@ -20,3 +20,5 @@ Just the snowpatch defaults, and nothing from its libraries:
 Only print things that may require human attention:
 
 	`RUST_LOG=warn`
+
+Note that if using `cargo` you will enable logging for cargo as well, 

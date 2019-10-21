@@ -41,6 +41,8 @@ docopt = "1.1"
 log = "0.4"
 env_logger = "0.6"
 base64 = "0.10"
+lettre = "0.9"
+lettre_email = "0.9"
 
 [build-dependencies]
 vergen = "3"
