@@ -256,7 +256,11 @@ impl PatchworkServer {
     }
 
     pub fn get_url_string(&self, url: &str) -> std::result::Result<String, reqwest::Error> {
-        let mut resp = try!(self.client.get(&*url).headers(self.headers.clone()).send());
+        let mut resp = self
+            .client
+            .get(&*url)
+            .headers(self.headers.clone())
+            .send()?;
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         Ok(String::from_utf8(body).unwrap())
@@ -270,12 +274,12 @@ impl PatchworkServer {
         let encoded = serde_json::to_string(&result).unwrap();
         let headers = self.headers.clone();
         debug!("JSON Encoded: {}", encoded);
-        let mut resp = try!(self
+        let mut resp = self
             .client
             .post(checks_url)
             .headers(headers)
             .body(encoded)
-            .send());
+            .send()?;
         let mut body: Vec<u8> = vec![];
         io::copy(&mut resp, &mut body).unwrap();
         trace!("{}", String::from_utf8(body).unwrap());
