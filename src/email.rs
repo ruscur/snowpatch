@@ -15,7 +15,7 @@
 #![allow(warnings)]
 use lettre::smtp::authentication::{Credentials, Mechanism};
 use lettre::smtp::ConnectionReuseParameters;
-use lettre::{SmtpClient, SmtpTransport};
+use lettre::{SmtpClient, SmtpTransport, Transport};
 use lettre_email::{EmailBuilder, Mailbox};
 use patchwork::{Patch, TestResult, TestState};
 use settings;
@@ -92,6 +92,18 @@ impl EmailReport {
 
     fn format_error(&self, result: TestResult) -> String {
         let mut report = String::new();
+
+        report.push_str(
+            format!(
+                "The test {} reported the following: {}\n \
+                 You can see more details here: {}\n",
+                result.context.unwrap(),
+                result.description.unwrap(),
+                result.target_url.unwrap()
+            )
+            .as_str(),
+        );
+
         report
     }
 
@@ -100,10 +112,12 @@ impl EmailReport {
     /// if produced by snowpatch, they should be, but still.
     pub fn populate_body(&self, builder: EmailBuilder) -> EmailBuilder {
         let mut body = String::new();
-        body.push_str("Thanks for your contribution, unfortunately we've found some issues.\n");
+        body.push_str("Thanks for your contribution, unfortunately we've found some issues.\n\n");
         body.push_str(&self.format_apply());
+        body.push_str("\n");
         for error in &self.errors {
             body.push_str(&self.format_error(error.clone()));
+            body.push_str("\n");
         }
         builder
     }
@@ -125,7 +139,10 @@ pub fn send_series_results(
     let report = EmailReport::new(patch.clone(), results, settings.clone());
     builder = report.populate_to(builder);
     builder = report.populate_body(builder);
-    Ok(())
+    match mailer.send(builder.build()?.into()) {
+        Ok(resp) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 #[cfg(test)]
