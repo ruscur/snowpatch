@@ -110,7 +110,7 @@ impl EmailReport {
     /// Produce a neat report string for a given individual test result
     /// TODO: we assume all TestResult fields are populated.
     /// if produced by snowpatch, they should be, but still.
-    pub fn populate_body(&self, builder: EmailBuilder) -> EmailBuilder {
+    pub fn populate_body(&self) -> String {
         let mut body = String::new();
         body.push_str("Thanks for your contribution, unfortunately we've found some issues.\n\n");
         body.push_str(&self.format_apply());
@@ -119,7 +119,7 @@ impl EmailReport {
             body.push_str(&self.format_error(error.clone()));
             body.push_str("\n");
         }
-        builder
+        body
     }
 }
 /// Only supports localhost:25 unauthenticated currently.
@@ -137,8 +137,11 @@ pub fn send_series_results(
     let mut mailer = get_mailer();
     let mut builder = EmailBuilder::new().from(settings.from.clone());
     let report = EmailReport::new(patch.clone(), results, settings.clone());
-    builder = report.populate_to(builder);
-    builder = report.populate_body(builder);
+    builder = report
+        .populate_to(builder)
+        .in_reply_to(patch.msgid.clone())
+        .subject(format!("Test Results: RE: {}", &patch.name))
+        .text(report.populate_body());
     match mailer.send(builder.build()?.into()) {
         Ok(resp) => Ok(()),
         Err(e) => Err(e.into()),
