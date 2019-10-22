@@ -135,7 +135,7 @@ pub fn send_series_results(
     settings: &settings::Email,
 ) -> Result<(), Box<dyn Error>> {
     let mut mailer = get_mailer();
-    let mut builder = EmailBuilder::new();
+    let mut builder = EmailBuilder::new().from(settings.from.clone());
     let report = EmailReport::new(patch.clone(), results, settings.clone());
     builder = report.populate_to(builder);
     builder = report.populate_body(builder);
