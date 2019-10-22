@@ -27,6 +27,7 @@ struct EmailReport {
     errors: Vec<TestResult>,
     warnings: Vec<TestResult>,
     successes: Vec<TestResult>,
+    apply_patch: TestResult,
     settings: settings::Email,
 }
 
@@ -35,7 +36,19 @@ impl EmailReport {
         let mut errors: Vec<TestResult> = Vec::new();
         let mut warnings: Vec<TestResult> = Vec::new();
         let mut successes: Vec<TestResult> = Vec::new();
+        // we create this pointless result because we know we're always going to have an
+        //"apply_patch" test, but the compiler doesn't.  this is a bit hacky.
+        let mut apply_patch = TestResult {
+            state: TestState::Pending,
+            ..Default::default()
+        };
+
         for result in results {
+            if result.context.as_ref().unwrap() == "apply_patch" {
+                apply_patch = result;
+                // we don't want to treat it as a normal test
+                continue;
+            }
             match result.state {
                 TestState::Fail => errors.push(result),
                 TestState::Warning => warnings.push(result),
@@ -43,11 +56,13 @@ impl EmailReport {
                 _ => (),
             }
         }
+
         EmailReport {
             patch: patch,
             errors: errors,
             warnings: warnings,
             successes: successes,
+            apply_patch: apply_patch,
             settings: settings,
         }
     }
@@ -57,6 +72,22 @@ impl EmailReport {
             None => builder.to(self.patch.submitter.email.as_str()),
         };
         builder.to(self.patch.project.list_email.as_str())
+    }
+
+    fn format_apply(&self) -> String {
+        match &self.apply_patch.state {
+            TestState::Success => format!(
+                "Your patch was {}\n",
+                &self
+                    .apply_patch
+                    .description
+                    .as_ref()
+                    .unwrap()
+                    .to_lowercase()
+            ),
+            TestState::Fail => format!("Your patch failed to apply to any branch.\n"),
+            _ => String::from("We've somehow lost track of where we applied your patch...\n"),
+        }
     }
 
     fn format_error(&self, result: TestResult) -> String {
@@ -70,6 +101,7 @@ impl EmailReport {
     pub fn populate_body(&self, builder: EmailBuilder) -> EmailBuilder {
         let mut body = String::new();
         body.push_str("Thanks for your contribution, unfortunately we've found some issues.\n");
+        body.push_str(&self.format_apply());
         for error in &self.errors {
             body.push_str(&self.format_error(error.clone()));
         }
