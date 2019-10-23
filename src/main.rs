@@ -105,9 +105,9 @@ struct Args {
 fn run_test(
     backend: &dyn CIBackend,
     project: &Project,
-    tag: &str,
-    branch_name: &str,
-    base: &str,
+    tag: String,
+    branch_name: String,
+    base: String,
     job: &Job,
 ) -> TestResult {
     let mut params = Vec::<(&str, &str)>::new();
@@ -117,9 +117,9 @@ fn run_test(
         params.push((param_name, param_value));
     }
     params.push((&job.remote, &project.remote_uri));
-    params.push((&job.branch, tag));
+    params.push((&job.branch, &tag));
     if let Some(ref base_param) = job.base {
-        params.push((&base_param, base));
+        params.push((&base_param, &base));
     }
 
     info!("Starting job: {}", &job.title);
@@ -160,9 +160,9 @@ fn run_tests(
     settings: &Config,
     client: Arc<Client>,
     project: &Project,
-    tag: &str,
-    branch_name: &str,
-    base: &str,
+    tag: String,
+    branch_name: String,
+    base: String,
     hefty_tests: bool,
 ) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
@@ -172,17 +172,33 @@ fn run_tests(
         username: settings.jenkins.username.clone(),
         token: settings.jenkins.token.clone(),
     };
-    let project = project.clone();
-    for job in &project.jobs {
+    let jobs = project.jobs.clone();
+    let mut test_threads = vec![];
+    for job in jobs {
+        let job_name = format!("{}-{}", job.title, tag.clone());
         if !hefty_tests && job.hefty {
             debug!("Skipping hefty test {}", job.title);
             continue;
         }
+        let tag = tag.clone();
+        let branch_name = branch_name.clone();
+        let jenkins = jenkins.clone();
+        let project = project.clone();
+        let base = base.clone();
 
-        let result = run_test(&jenkins, &project, &tag, &branch_name, &base, &job);
+        let test = thread::Builder::new()
+            .name(job_name)
+            .spawn(move || run_test(&jenkins, &project, tag, branch_name, base, &job));
 
-        results.push(result);
+        match test {
+            Ok(thread) => test_threads.push(thread),
+            Err(e) => error!("Error spawning thread: {}", e),
+        }
     }
+    for thread in test_threads {
+        results.push(thread.join().unwrap());
+    }
+
     results
 }
 
@@ -306,7 +322,8 @@ fn test_patch(
         let project = project.clone();
         let client = client.clone();
         let test_all_branches = project.test_all_branches.unwrap_or(true);
-
+        let tag = tag.clone();
+        let branch_name = branch_name.clone();
         let base = commit.id().to_string();
 
         // We've set up a remote branch, time to kick off tests
@@ -315,9 +332,9 @@ fn test_patch(
                 &settings,
                 client,
                 &project,
-                &tag,
-                &branch_name,
-                &base,
+                tag,
+                branch_name,
+                base,
                 hefty_tests,
             )
         });

@@ -38,6 +38,7 @@ const JENKINS_POLLING_INTERVAL: u64 = 5000; // Polling interval in milliseconds
 
 // Jenkins API definitions
 
+#[derive(Clone)]
 pub struct JenkinsBackend {
     pub base_url: String,
     pub reqwest_client: Arc<Client>,
