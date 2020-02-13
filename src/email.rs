@@ -76,18 +76,22 @@ impl EmailReport {
     }
 
     // TODO: this doesn't use the client from main.rs so no proxy
-    pub fn get_log_snippet(url: &str, lines: u8) -> String {
+    pub fn get_log_snippet(url: &str, num_lines: u8) -> String {
         match reqwest::get(url) {
             Ok(mut resp) => {
                 let mut snippet = String::new();
+                let text = resp.text().unwrap();
+                let mut lines = text.lines();
+
                 snippet.push_str("Here's a preview of the log:\n\n");
-                let mut count = 0;
-                for line in resp.text().unwrap().lines() {
-                    if count >= lines {
-                        break;
+                for _ in 0..num_lines {
+                    match lines.next() {
+                        Some(line) => {
+                            snippet.push_str(line);
+                            snippet.push('\n');
+                        }
+                        None => break,
                     }
-                    snippet.push_str(line);
-                    count += 1;
                 }
 
                 snippet
@@ -120,7 +124,7 @@ impl EmailReport {
             format!(
                 "The test {} reported the following: {}\n \
                  Full log: {}\n
-Here's a preview:\n{}\n",
+\n{}\n",
                 result.context.unwrap(),
                 result.description.unwrap(),
                 url,
