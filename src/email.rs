@@ -66,12 +66,34 @@ impl EmailReport {
             settings: settings,
         }
     }
+
     pub fn populate_to(&self, builder: EmailBuilder) -> EmailBuilder {
         let builder = match &self.patch.submitter.name {
             Some(name) => builder.to((&self.patch.submitter.email, name)),
             None => builder.to(self.patch.submitter.email.as_str()),
         };
         builder.to(self.patch.project.list_email.as_str())
+    }
+
+    // TODO: this doesn't use the client from main.rs so no proxy
+    pub fn get_log_snippet(url: &str, lines: u8) -> String {
+        match reqwest::get(url) {
+            Ok(mut resp) => {
+                let mut snippet = String::new();
+                snippet.push_str("Here's a preview of the log:\n\n");
+                let mut count = 0;
+                for line in resp.text().unwrap().lines() {
+                    if count >= lines {
+                        break;
+                    }
+                    snippet.push_str(line);
+                    count += 1;
+                }
+
+                snippet
+            }
+            Err(e) => "".to_string(),
+        }
     }
 
     fn format_apply(&self) -> String {
@@ -92,14 +114,17 @@ impl EmailReport {
 
     fn format_error(&self, result: TestResult) -> String {
         let mut report = String::new();
+        let url = result.target_url.unwrap();
 
         report.push_str(
             format!(
                 "The test {} reported the following: {}\n \
-                 You can see more details here: {}\n",
+                 Full log: {}\n
+Here's a preview:\n{}\n",
                 result.context.unwrap(),
                 result.description.unwrap(),
-                result.target_url.unwrap()
+                url,
+                EmailReport::get_log_snippet(&url, 14)
             )
             .as_str(),
         );
