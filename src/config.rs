@@ -1,7 +1,7 @@
 //
 // snowpatch - continuous integration for patch-based workflows
 //
-// Copyright (C) 2016 IBM Corporation
+// Copyright (C) 2021 IBM Corporation
 // Authors:
 //     Russell Currey <ruscur@russell.cc>
 //     Andrew Donnellan <andrew.donnellan@au1.ibm.com>
@@ -80,4 +80,33 @@ pub fn parse_config(filename: &str) -> Result<Config> {
     validate_config(&config)?;
 
     Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_good_config() {
+        let good_config: Config = Config {
+            name: "linuxppc-dev".to_owned(),
+            git: Git {
+                user: "git".to_owned(),
+                public_key: "/home/ruscur/.ssh/id_rsa.pub".to_owned(),
+                private_key: "/home/ruscur/.ssh/id_rsa".to_owned(),
+            },
+            patchwork: Patchwork {
+                url: "https://patchwork.ozlabs.org".to_owned(),
+                port: None,
+                token: None,
+            },
+        };
+
+        assert!(validate_config(&good_config).is_ok());
+    }
+
+    #[test]
+    fn parse_good_config() {
+        assert!(parse_config("examples/tests/valid.ron").is_ok());
+    }
 }
