@@ -10,6 +10,16 @@ Primary goals include:
 - better, cleaner usage of third-party libraries
 - replace toml config file with something else more writable
 
+### modularity
+
+split out what snowpatch does into the following:
+
+- patchwork scanner that does git things
+- test watcher that gets metadata from a git branch
+  - watches github actions / gitlab CI
+  - keeps patchwork in sync
+- emailer that figures out test completion on patchwork and sends
+
 ### TODO
 
 Next things on the list at present:
@@ -17,7 +27,12 @@ Next things on the list at present:
 - flesh out what we want in the config file
 - write tests for config file parsing and validating
 - investigate HTTP library options (reqwest again?)
+
 ### Notes
+#### ureq
+
+Gonna try ureq and see if it's enough so we don't have to reqwest (and thus hyper)
+
 #### anyhow
 
 Since snowpatch is an application and not a library, but we consume a lot of different libraries, error handling is a pain.  Everything returns different error types that we don't care about, we just want to know what went wrong.  Using anyhow instead of being forced to box errors is nicer.

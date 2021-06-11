@@ -1,0 +1,13 @@
+(
+    name: "linuxppc-dev",
+    git: Git( // naming the struct isn't necessary, see patchwork
+        user: "git",
+        public_key: "/home/ruscur/.ssh/id_rsa.pub",
+        private_key: "/home/ruscur/.ssh/id_rsa",
+    ),
+    patchwork: (
+        url:  "https://patchwork.ozlabs.org"
+        //username: "ruscur",
+        //token: "bigchungus42069",
+    )
+)

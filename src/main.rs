@@ -14,7 +14,8 @@
 // main.rs - snowpatch main program
 //
 
-#![deny(warnings)]
+// I SOLEMNLY SWEAR TO UNCOMMENT THIS
+//#![deny(warnings)]
 
 extern crate clap;
 use clap::{App, Arg};
@@ -22,13 +23,30 @@ use clap::{App, Arg};
 extern crate ron;
 
 extern crate serde;
+extern crate serde_json;
 
 extern crate anyhow;
 use anyhow::Result;
 
 extern crate url;
 
+extern crate ureq;
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
+use ureq::{Agent, AgentBuilder};
+
+mod patchwork;
+use patchwork::PatchworkServer;
 mod config;
+
+extern crate log;
+
+mod watchcat;
+use watchcat::Watchcat;
+
+extern crate rayon;
 
 fn main() -> Result<()> {
     let matches = App::new("snowpatch")
@@ -44,9 +62,42 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
+    env_logger::init();
+
     // unwrap is safe because config is a required value
     let config = matches.value_of("config").unwrap();
-    config::parse_config(config)?;
+    let config = config::parse_config(config)?;
+
+    // XXX let's try and use config as little as possible
+    // instead of keeping around the patchwork config,
+    // let's use it to make a struct with a URL struct
+    // and a token and that's it.
+
+    // create the ureq Agent.  this should only be done once.
+    // it can be happily cloned between thread contexts.
+    let agent: Agent = AgentBuilder::new()
+        .timeout_read(Duration::from_secs(10))
+        .timeout_write(Duration::from_secs(10))
+        .build();
+
+    // this does a smoke test on creation.
+    let patchwork =
+        PatchworkServer::new(config.patchwork.url, config.patchwork.token, agent.clone())?;
+    let mut watchcat = Watchcat::new("linuxppc-dev", patchwork);
+    watchcat.scan()?;
+
+    loop {
+        thread::sleep(Duration::from_secs(60));
+        if Instant::now()
+            .duration_since(watchcat.last_checked)
+            .as_secs()
+            <= 600
+        {
+            continue;
+        }
+        watchcat.last_checked = Instant::now();
+        watchcat.scan()?;
+    }
 
     Ok(())
 }

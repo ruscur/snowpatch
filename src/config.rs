@@ -27,8 +27,8 @@ use url::Url;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     name: String,
-    git: Git,
-    patchwork: Patchwork,
+    pub git: Git,
+    pub patchwork: Patchwork,
 }
 
 /// Defines the git details snowpatch needs to push to remotes.
@@ -49,11 +49,9 @@ pub struct Git {
 #[derive(Debug, Deserialize)]
 pub struct Patchwork {
     /// URL of the Patchwork server, without port i.e. `https://patchwork.ozlabs.org`
-    url: String,
-    /// Port of the Patchwork server, defaults to `443`
-    port: Option<u16>,
+    pub url: String,
     /// API token you wish to use on the Patchwork server, only needed if pushing results
-    token: Option<String>,
+    pub token: Option<String>,
 }
 
 fn validate_config(config: &Config) -> Result<()> {
@@ -75,7 +73,7 @@ pub fn parse_config(filename: &str) -> Result<Config> {
     let config: Config =
         from_reader(file).with_context(|| format!("Failed to parse config file"))?;
 
-    println!("Config: {:?}", &config);
+    dbg!("Config: {:?}", &config);
 
     validate_config(&config)?;
 
@@ -97,7 +95,6 @@ mod tests {
             },
             patchwork: Patchwork {
                 url: "https://patchwork.ozlabs.org".to_owned(),
-                port: None,
                 token: None,
             },
         };
