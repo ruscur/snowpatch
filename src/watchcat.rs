@@ -1,12 +1,16 @@
-use anyhow::Result;
-use patchwork::{PatchworkServer, Series, TestState};
-use rayon::prelude::*;
 /// because cats are better than dogs
 ///
 /// The watchcat exists to monitor state.  It doesn't really care
 /// what the rest of snowpatch is doing, it's going to watch Patchwork
 /// to see if there's any new stuff to do, and queue up stuff to do.
+use anyhow::{Context, Result};
+use patchwork::{Check, PatchworkServer, Series, TestState};
+use rayon::prelude::*;
+use std::convert::TryInto;
+use std::ops::Deref;
 use std::time::{Duration, Instant};
+
+use DB;
 
 // You should spawn one watchcat per project.
 pub struct Watchcat {
@@ -27,7 +31,37 @@ impl Watchcat {
     }
 
     fn check_state(server: &PatchworkServer, series: &Series) -> Result<()> {
-        println!("{} {:?}", series.id, server.get_series_state(series.id)?);
+        let patch = series.patches.first().context("Series with no patches?")?;
+        let checks = server.get_patch_checks(patch.id)?;
+
+        if checks.is_empty() {
+            let tree = DB.open_tree(b"needs-testing")?;
+
+            // TODO here the value would be more useful information, probably.
+            tree.insert(
+                bincode::serialize(&series.id)?,
+                bincode::serialize(&series.mbox)?,
+            )?;
+        }
+        /*
+                for check in checks {
+                    if check.state == TestState::Pending {
+                        let prs = DB.get(b"PRs")?;
+
+                        match prs {
+                            Some(v) => {
+                                let decoded: Check = bincode::deserialize(v.deref())?;
+                                println!("WHAT THE FUUUUU {} {}", decoded.user.username, decoded.id);
+                            },
+                            None =>  {
+                                // let's get insane
+                                let encoded: Vec<u8> = bincode::serialize(&check)?;
+                                DB.insert(b"PRs", encoded);
+                            }
+                        }
+                    }
+                }
+        */
 
         Ok(())
     }

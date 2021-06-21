@@ -26,7 +26,11 @@ Next things on the list at present:
 
 - flesh out what we want in the config file
 - write tests for config file parsing and validating
-- investigate HTTP library options (reqwest again?)
+- DONE investigate HTTP library options
+  - happy with ureq unless we end up actually wanting async
+- watchcat (Patchwork scanner)
+  - basic threading scans and assesses state.
+  -
 
 ### Notes
 #### ureq

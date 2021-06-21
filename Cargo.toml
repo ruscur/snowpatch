@@ -38,3 +38,6 @@ ureq = { version = "2.1", features = ["json"] }
 env_logger = "0.8"
 log = "0.4"
 rayon = "1.5"
+lazy_static = "1.4"
+sled = "0.34"
+bincode = "1.3"

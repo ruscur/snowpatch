@@ -48,7 +48,27 @@ use watchcat::Watchcat;
 
 extern crate rayon;
 
+#[macro_use]
+extern crate lazy_static;
+
+extern crate sled;
+
+extern crate bincode;
+
+use std::ops::Deref;
+
+// This is initialised at runtime and globally accessible.
+// Our database is completely thread-safe, so that isn't a problem.
+// Let's not have any more global variables than that.
+lazy_static! {
+    // Yes there's an unwrap, and yes I'd rather parse options and stuff first.
+    // Beats trying to pass a db pointer to every corner of the universe...
+    pub static ref DB: sled::Db = sled::open("database").unwrap();
+}
+
 fn main() -> Result<()> {
+    let db_id = DB.generate_id()?;
+
     let matches = App::new("snowpatch")
         .version("1.0")
         .author("Russell Currey <ruscur@russell.cc>")
@@ -73,6 +93,14 @@ fn main() -> Result<()> {
     // let's use it to make a struct with a URL struct
     // and a token and that's it.
 
+    if DB.was_recovered() {
+        dbg!(DB.size_on_disk()?);
+    } else {
+        dbg!("New database created.");
+    }
+
+    dbg!(db_id);
+
     // create the ureq Agent.  this should only be done once.
     // it can be happily cloned between thread contexts.
     let agent: Agent = AgentBuilder::new()
@@ -87,6 +115,18 @@ fn main() -> Result<()> {
     watchcat.scan()?;
 
     loop {
+        // XXX this is just debug stuff.
+        for name in DB.tree_names() {
+            let tree = DB.open_tree(name)?;
+
+            for result in tree.iter() {
+                let (k, v) = result?;
+                let key: u64 = bincode::deserialize(k.deref())?;
+                let value: String = bincode::deserialize(v.deref())?;
+                dbg!(key, value);
+            }
+        }
+
         thread::sleep(Duration::from_secs(60));
         if Instant::now()
             .duration_since(watchcat.last_checked)

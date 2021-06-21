@@ -90,6 +90,21 @@ impl PatchworkServer {
 
     //pub fn get_patch_state(&self, patch: u64) -> Result<Vec<TestResult>>;
 
+    pub fn get_patch_checks(&self, patch: u64) -> Result<Vec<Check>> {
+        let mut patch_checks_url = self.api.clone();
+
+        patch_checks_url
+            .path_segments_mut()
+            .map_err(|_| Error::msg("URL is boned"))? // URL crate sucks
+            .push("patches")
+            .push(&patch.to_string())
+            .push("checks");
+
+        let resp = self.agent.request_url("GET", &&patch_checks_url).call()?;
+
+        Ok(serde_json::from_value(resp.into_json()?)?)
+    }
+
     pub fn get_series_state(&self, series: u64) -> Result<TestState> {
         let series = self.get_series(series)?;
 
@@ -132,6 +147,16 @@ pub struct DelegateSummary {
     pub email: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UserSummary {
+    pub id: u64,
+    pub url: String,
+    pub username: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+}
+
 // /api/1.2/projects/{id}
 #[derive(Deserialize, Clone, Debug)]
 pub struct Project {
@@ -166,8 +191,8 @@ pub struct Patch {
     pub delegate: Option<DelegateSummary>,
     pub mbox: String,
     pub series: Vec<SeriesSummary>,
-    pub check: TestState, // TODO enum of possible states
-    pub checks: String,   // URL
+    pub check: TestState,
+    pub checks: String, // URL
     pub tags: BTreeMap<String, u64>,
 }
 
@@ -247,7 +272,19 @@ impl Default for TestState {
     }
 }
 
-// /api/1.2/series/*/revisions/*/test-results/
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Check {
+    pub id: u64,
+    pub url: String,
+    pub user: UserSummary,
+    pub date: String,
+    pub state: TestState,
+    pub target_url: Option<String>,
+    pub context: String,
+    pub description: Option<String>,
+}
+
+// POST to /api/1.2/patches/{patch_id}/checks/
 #[derive(Serialize, Default, Clone, Debug)]
 pub struct TestResult {
     pub state: TestState,
