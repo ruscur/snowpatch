@@ -1,3 +1,6 @@
+/// the patchwork module should not track state about any patch
+/// it should handle all direct API interactions and common operations on the objects it returns
+/// basically, if there's any part of snowpatch that could become its own individual library, it's this.
 use anyhow::{Error, Result};
 use log::debug;
 use rayon::iter::IntoParallelRefIterator;

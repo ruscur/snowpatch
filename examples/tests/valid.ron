@@ -4,10 +4,13 @@
         user: "git",
         public_key: "/home/ruscur/.ssh/id_rsa.pub",
         private_key: "/home/ruscur/.ssh/id_rsa",
+        repo: "/home/ruscur/code/linux",
+        workdir: "/home/ruscur/code/snowpatch/workdir",
+        workers: 4
     ),
     patchwork: (
         url:  "https://patchwork.ozlabs.org"
         //username: "ruscur",
         //token: "bigchungus42069",
-    )
+    ),
 )

@@ -41,6 +41,17 @@ pub struct Git {
     public_key: String,
     /// Full path to the private key, for example `/home/ruscur/.ssh/id_rsa`
     private_key: String,
+    /// Full path of the git repo to work with
+    pub repo: String,
+    /// Path that you want snowpatch to make git worktrees in
+    pub workdir: String,
+    /// Max number of worktrees created at once
+    #[serde(default = "default_workers")]
+    pub workers: usize,
+}
+
+fn default_workers() -> usize {
+    1
 }
 
 /// Defines the Patchwork server you wish to work with.

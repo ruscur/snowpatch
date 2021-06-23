@@ -30,7 +30,11 @@ Next things on the list at present:
   - happy with ureq unless we end up actually wanting async
 - watchcat (Patchwork scanner)
   - basic threading scans and assesses state.
-  -
+  - queues stuff up in the db
+- git stuff
+  - first find which tree to use, try apply without actually applying thing
+  - make worktree.
+
 
 ### Notes
 #### ureq

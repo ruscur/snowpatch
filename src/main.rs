@@ -14,8 +14,9 @@
 // main.rs - snowpatch main program
 //
 
-// I SOLEMNLY SWEAR TO UNCOMMENT THIS
-//#![deny(warnings)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
+#![deny(warnings)]
 
 extern crate clap;
 use clap::{App, Arg};
@@ -27,24 +28,26 @@ extern crate serde_json;
 
 extern crate anyhow;
 use anyhow::Result;
+use log::{debug, warn};
 
 extern crate url;
 
 extern crate ureq;
 use std::{
+    fmt::Display,
     thread,
     time::{Duration, Instant},
 };
 use ureq::{Agent, AgentBuilder};
 
 mod patchwork;
-use patchwork::PatchworkServer;
+use crate::patchwork::PatchworkServer;
 mod config;
 
 extern crate log;
 
 mod watchcat;
-use watchcat::Watchcat;
+use crate::watchcat::Watchcat;
 
 extern crate rayon;
 
@@ -56,6 +59,13 @@ extern crate sled;
 extern crate bincode;
 
 use std::ops::Deref;
+
+extern crate git2;
+
+mod git;
+use crate::git::GitOps;
+
+mod database;
 
 // This is initialised at runtime and globally accessible.
 // Our database is completely thread-safe, so that isn't a problem.
@@ -108,23 +118,29 @@ fn main() -> Result<()> {
         .timeout_write(Duration::from_secs(10))
         .build();
 
+    let git = GitOps::new(config.git.repo, config.git.workers, config.git.workdir)?;
+
+    rayon::spawn(move || {
+        git.init_worktrees().unwrap();
+        git.ingest().unwrap();
+    });
+
     // this does a smoke test on creation.
     let patchwork =
         PatchworkServer::new(config.patchwork.url, config.patchwork.token, agent.clone())?;
     let mut watchcat = Watchcat::new("linuxppc-dev", patchwork);
-    watchcat.scan()?;
+    //    watchcat.scan()?;
 
     loop {
         // XXX this is just debug stuff.
         for name in DB.tree_names() {
-            let tree = DB.open_tree(name)?;
+            let tree = DB.open_tree(&name)?;
 
-            for result in tree.iter() {
-                let (k, v) = result?;
-                let key: u64 = bincode::deserialize(k.deref())?;
-                let value: String = bincode::deserialize(v.deref())?;
-                dbg!(key, value);
-            }
+            debug!(
+                "Tree {} has {} values",
+                String::from_utf8_lossy(&name),
+                tree.iter().count()
+            );
         }
 
         thread::sleep(Duration::from_secs(60));
@@ -138,6 +154,4 @@ fn main() -> Result<()> {
         watchcat.last_checked = Instant::now();
         watchcat.scan()?;
     }
-
-    Ok(())
 }
