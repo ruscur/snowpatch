@@ -8,8 +8,10 @@ use crate::patchwork::{Check, PatchworkServer, Series, TestState};
 /// The watchcat does not test anything.
 /// It just queues things to be tested, checks in to see if any paper needs pushing,
 use anyhow::{Context, Result};
+use log::{debug, log_enabled};
 use rayon::prelude::*;
 use std::time::{Duration, Instant};
+use url::Url;
 
 use crate::DB;
 
@@ -17,7 +19,6 @@ use crate::DB;
 pub struct Watchcat {
     project: String,
     server: PatchworkServer,
-    watching: Vec<SeriesState>,
     pub last_checked: Instant,
 }
 
@@ -26,16 +27,19 @@ impl Watchcat {
         Watchcat {
             project: project.to_string(),
             server,
-            watching: Vec::new(),
             last_checked: Instant::now(),
         }
     }
 
     fn check_state(server: &PatchworkServer, series: &Series) -> Result<()> {
-        let patch = series.patches.first().context("Series with no patches?")?;
+        let patch = series
+            .patches
+            .first()
+            .context(format!("Series with no patches? {}", series.id))?;
         let checks = server.get_patch_checks(patch.id)?;
 
-        if checks.is_empty() {
+        // TODO need consolidation between this and the filters
+        if checks.is_empty() || true {
             let tree = DB.open_tree(b"needs testing")?;
 
             // TODO here the value would be more useful information, probably.
@@ -54,7 +58,25 @@ impl Watchcat {
 
         let results: Result<Vec<()>> = list
             .par_iter()
-            .map_with(&self.server, |s, p| Watchcat::check_state(s, p))
+            .filter(|series| series.received_all)
+            .filter(|series| series.received_total > 0)
+            .filter(|series| -> bool {
+                if log_enabled!(log::Level::Debug) {
+                    return true;
+                };
+                if let Some(patch_zero) = series.patches.first() {
+                    if let Ok(patch) = self.server.get_patch(patch_zero.id) {
+                        patch.action_required()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            })
+            .map_with(&self.server, |server, series| {
+                Watchcat::check_state(server, series)
+            })
             .collect();
 
         let _ = results?;
@@ -65,9 +87,4 @@ impl Watchcat {
     pub fn scan(&self) -> Result<()> {
         self.check_series_list()
     }
-}
-
-struct SeriesState {
-    id: u32,
-    state: String, // fix obviously
 }

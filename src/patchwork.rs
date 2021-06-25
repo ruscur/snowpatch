@@ -3,10 +3,12 @@
 /// basically, if there's any part of snowpatch that could become its own individual library, it's this.
 use anyhow::{Error, Result};
 use log::debug;
+use log::log_enabled;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::prelude::*;
 use serde::{self, Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
+use std::io::Read;
 use ureq::Agent;
 use url::Url;
 
@@ -133,6 +135,21 @@ impl PatchworkServer {
     }
 }
 
+/// Just download a thing.  Designed for downloading patches.
+/// Doesn't need any state since there's no auth involved.
+/// *Could* need some state for the agent if there were proxies
+/// involved, also could need some state for performance if the
+/// agent connection pool actually matters.
+pub fn download_file(url: &Url) -> Result<Vec<u8>> {
+    let req = ureq::request_url("GET", &url).call()?;
+
+    let mut buf: Vec<u8> = vec![];
+
+    req.into_reader().read_to_end(&mut buf)?;
+
+    Ok(buf)
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct SubmitterSummary {
     pub id: u64,
@@ -205,7 +222,7 @@ impl Patch {
     }
 
     pub fn action_required(&self) -> bool {
-        &self.state == "new" || &self.state == "under-review"
+        self.pull_url.is_none() && (&self.state == "new" || &self.state == "under-review")
     }
 }
 

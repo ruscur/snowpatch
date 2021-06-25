@@ -10,3 +10,10 @@ pub fn move_to_new_queue(old: &Tree, new: &Tree, key: &[u8]) -> Result<(), Trans
         Ok(())
     })
 }
+
+/// Does nothing until something on the tree changes.
+pub fn wait_for_tree(tree: &Tree) {
+    let sub = tree.watch_prefix(vec![]);
+    // blocks until there's an update to the tree
+    for _ in sub.take(1) {}
+}

@@ -1,7 +1,7 @@
 //
 // snowpatch - continuous integration for patch-based workflows
 //
-// Copyright (C) 2016 IBM Corporation
+// Copyright (C) 2021 IBM Corporation
 // Authors:
 //     Russell Currey <ruscur@russell.cc>
 //     Andrew Donnellan <andrew.donnellan@au1.ibm.com>
@@ -28,7 +28,7 @@ extern crate serde_json;
 
 extern crate anyhow;
 use anyhow::Result;
-use log::{debug, warn};
+use log::{debug, error, info, log_enabled, warn};
 
 extern crate url;
 
@@ -129,20 +129,20 @@ fn main() -> Result<()> {
     let patchwork =
         PatchworkServer::new(config.patchwork.url, config.patchwork.token, agent.clone())?;
     let mut watchcat = Watchcat::new("linuxppc-dev", patchwork);
-    //    watchcat.scan()?;
+    watchcat.scan()?;
 
     loop {
-        // XXX this is just debug stuff.
-        for name in DB.tree_names() {
-            let tree = DB.open_tree(&name)?;
+        if log_enabled!(log::Level::Debug) {
+            for name in DB.tree_names() {
+                let tree = DB.open_tree(&name)?;
 
-            debug!(
-                "Tree {} has {} values",
-                String::from_utf8_lossy(&name),
-                tree.iter().count()
-            );
+                debug!(
+                    "Tree {} has {} values",
+                    String::from_utf8_lossy(&name),
+                    tree.iter().count()
+                );
+            }
         }
-
         thread::sleep(Duration::from_secs(60));
         if Instant::now()
             .duration_since(watchcat.last_checked)

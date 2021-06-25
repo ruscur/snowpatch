@@ -1,16 +1,31 @@
+use anyhow::bail;
+use anyhow::Context;
 use anyhow::Result;
 use bincode::{deserialize, serialize};
+use git2::build::CheckoutBuilder;
+use git2::Commit;
+use git2::Cred;
+use git2::Diff;
+use git2::ObjectType;
+use git2::PushOptions;
+use git2::RemoteCallbacks;
 use git2::Repository;
 use git2::Worktree;
 use git2::WorktreePruneOptions;
 use log::debug;
+use log::error;
 use log::info;
 use log::warn;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
+use std::time::Instant;
+use url::Url;
 
 use crate::database::*;
+use crate::patchwork::*;
 use crate::DB;
 
 pub struct GitOps {
@@ -19,18 +34,13 @@ pub struct GitOps {
     workdir: PathBuf,
 }
 
-fn do_work(id: u64) {
-    println!(
-        "I'm supposed to be doing work on id {} as thread {}!",
-        id,
-        rayon::current_thread_index().unwrap()
-    );
-}
-
 impl GitOps {
     pub fn new(repo_dir: String, worker_count: usize, work_dir: String) -> Result<GitOps> {
         let repo = Repository::open(repo_dir)?;
-        let pool = ThreadPoolBuilder::new().num_threads(worker_count).build()?;
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(worker_count)
+            .thread_name(|i| format!("snowpatch{}", i))
+            .build()?;
         let workdir = PathBuf::from(work_dir);
 
         Ok(GitOps {
@@ -138,12 +148,7 @@ impl GitOps {
     /// Watch for stuff on the "needs testing" tree and handle it.
     pub fn ingest(&self) -> Result<()> {
         let inbound = DB.open_tree(b"needs testing")?;
-        let outbound = DB.open_tree(b"git ops in progress")?;
-
-        println!(
-            "LIVING KEKW as thread id {}",
-            rayon::current_thread_index().unwrap()
-        );
+        let outbound = DB.open_tree(b"awaiting git worker")?;
 
         loop {
             for result in inbound.iter() {
@@ -151,8 +156,12 @@ impl GitOps {
                 let series_id: u64 = deserialize(&key)?;
 
                 move_to_new_queue(&inbound, &outbound, &key)?;
+                let workdir = self.workdir.clone();
 
-                self.pool.spawn(move || do_work(series_id));
+                self.pool.spawn(move || {
+                    try_do_work(series_id, workdir)
+                        .unwrap_or_else(|e| error!("Boned: {}", e.to_string()))
+                });
             }
 
             let sub = inbound.watch_prefix(vec![]);
@@ -161,4 +170,152 @@ impl GitOps {
             // maybe we have data to care about now.
         }
     }
+}
+
+fn try_do_work(id: u64, workdir: PathBuf) -> Result<()> {
+    let key = serialize(&id)?;
+    let worker_id = rayon::current_thread_index().unwrap();
+    let inbound = DB.open_tree(b"awaiting git worker")?;
+    let outbound = DB.open_tree(format!("git worker {}", worker_id))?;
+    let failed = DB.open_tree(b"git failures")?;
+
+    debug!("I am worker {} with patch {}.", worker_id, id);
+
+    // This should never happen.
+    while outbound.iter().count() > 0 {
+        debug!("I am worker {} with patch {} waiting.", worker_id, id);
+        wait_for_tree(&outbound);
+    }
+
+    move_to_new_queue(&inbound, &outbound, &key)?;
+
+    let result = do_work(id, workdir);
+
+    match result {
+        Ok(_) => {
+            info!("Git ops on series {} succeded!", id);
+            outbound.remove(&key)?;
+            Ok(())
+        }
+        Err(e) => {
+            info!("Git ops on series {} failed: {}", id, e.to_string());
+            move_to_new_queue(&outbound, &failed, &key)?;
+            Ok(())
+        }
+    }
+}
+
+fn test_apply(repo: &Repository, diff: &Diff) -> Result<()> {
+    let mut ao = git2::ApplyOptions::new();
+    ao.check(true);
+    let result = repo.apply(&diff, git2::ApplyLocation::Both, Some(&mut ao));
+
+    Ok(result?)
+}
+
+/// This should restore
+fn clean_and_reset(repo: &Repository, branch_name: &str) -> Result<()> {
+    // There's no git2 implementation of git clean.
+    // Hopefully resetting is enough since we check all applications before
+    // actually going through with them.
+    let branch = repo.find_branch(branch_name, git2::BranchType::Local)?;
+    let target = branch
+        .get()
+        .resolve()?
+        .peel(ObjectType::Commit)?
+        .into_commit();
+
+    // Can't bubble up this error because it includes repo references
+    // which don't implement Sync.
+    let target = match target {
+        Ok(c) => c,
+        Err(_) => bail!("Couldn't get commit from {}", branch_name),
+    };
+
+    let mut cb = CheckoutBuilder::new();
+    cb.force();
+    cb.remove_untracked(true);
+    cb.use_theirs(true);
+
+    repo.reset(target.as_object(), git2::ResetType::Hard, Some(&mut cb))?;
+    Ok(())
+}
+
+fn get_git_push_options() -> Result<PushOptions<'static>> {
+    let mut callbacks = RemoteCallbacks::new();
+
+    callbacks.credentials(|_url, username, _allowed_types| {
+        let username = username.unwrap_or("git");
+        Cred::ssh_key(username, None, Path::new("/home/ruscur/.ssh/id_rsa"), None)
+    });
+
+    let mut po = PushOptions::new();
+    po.remote_callbacks(callbacks);
+
+    Ok(po)
+}
+
+fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
+    let key = serialize(&id)?;
+    let worker_id = rayon::current_thread_index().unwrap();
+    let my_tree = DB.open_tree(format!("git worker {}", worker_id))?;
+
+    // We (hopefully) now have exclusive access to the worktree.
+    let mut worktree_path = workdir.clone();
+    worktree_path.push(format!("snowpatch{}", worker_id));
+    let repo = Repository::open(worktree_path)?;
+
+    clean_and_reset(&repo, "master")?;
+
+    let mbox_url: String = deserialize(&my_tree.get(&key)?.unwrap())?;
+    let mbox_url = Url::parse(&mbox_url)?;
+
+    let mbox = download_file(&mbox_url)?;
+
+    let diff = Diff::from_buffer(&mbox)?;
+
+    let deltacount = diff.deltas().count();
+    println!(
+        "I'm thread {} with series {} with {} deltas",
+        worker_id, id, deltacount
+    );
+
+    // By testing first there's no consequences on the tree if it fails
+    test_apply(&repo, &diff)?;
+
+    repo.apply(&diff, git2::ApplyLocation::Both, None)?;
+    let sig = repo.signature()?;
+    let msg = format!("From patchwork series {}", &id);
+    let head_commit = repo
+        .head()?
+        .resolve()?
+        .peel(ObjectType::Commit)?
+        .into_commit();
+
+    // Can't bubble up this error because it includes repo references
+    // which don't implement Sync.
+    let head_commit = match head_commit {
+        Ok(c) => c,
+        Err(_) => bail!("Couldn't get HEAD commit on {}", &id),
+    };
+
+    // git2 really sucks.
+    let _commit_id = repo.commit(
+        Some("HEAD"),
+        &sig,
+        &sig,
+        &msg,
+        &repo.find_tree(repo.index()?.write_tree()?)?,
+        &[&head_commit],
+    )?;
+
+    // TODO this needs to come from the DB from the config.
+    let mut remote = repo.find_remote("gitlab2")?;
+
+    remote.push(
+        &[format!("+HEAD:refs/heads/snowpatch/{}", &id).as_str()],
+        Some(&mut get_git_push_options()?),
+    )?;
+
+    Ok(())
 }
