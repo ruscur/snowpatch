@@ -245,8 +245,12 @@ fn get_git_push_options() -> Result<PushOptions<'static>> {
     let mut callbacks = RemoteCallbacks::new();
 
     callbacks.credentials(|_url, username, _allowed_types| {
-        let username = username.unwrap_or("git");
-        Cred::ssh_key(username, None, Path::new("/home/ruscur/.ssh/id_rsa"), None)
+        Cred::ssh_key(
+            username.unwrap_or("git"),
+            None,
+            Path::new("/home/ruscur/.ssh/id_rsa"),
+            None,
+        )
     });
 
     let mut po = PushOptions::new();
