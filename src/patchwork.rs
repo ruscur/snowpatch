@@ -19,17 +19,17 @@ pub struct PatchworkServer {
 }
 
 impl PatchworkServer {
-    pub fn new(url: String, token: Option<String>, agent: Agent) -> Result<PatchworkServer> {
-        let mut url_struct = Url::parse(&url)?;
+    pub fn new(url: Url, token: Option<String>, agent: Agent) -> Result<PatchworkServer> {
+        let mut api_url = url.clone();
 
-        url_struct
+        api_url
             .path_segments_mut() // Each segment of the URL path
             .map_err(|_| Error::msg("URL is boned"))? // URL crate sucks
             .push("api")
             .push("1.2"); // snowpatch will only ever support one revision
 
         let server = PatchworkServer {
-            api: url_struct,
+            api: api_url,
             token,
             agent,
         };
@@ -153,7 +153,7 @@ pub fn download_file(url: &Url) -> Result<Vec<u8>> {
 #[derive(Deserialize, Clone, Debug)]
 pub struct SubmitterSummary {
     pub id: u64,
-    pub url: String,
+    pub url: Url,
     pub name: Option<String>,
     pub email: String,
 }
@@ -161,7 +161,7 @@ pub struct SubmitterSummary {
 #[derive(Deserialize, Clone, Debug)]
 pub struct DelegateSummary {
     pub id: u64,
-    pub url: String,
+    pub url: Url,
     pub first_name: String,
     pub last_name: String,
     pub email: String,
@@ -170,7 +170,7 @@ pub struct DelegateSummary {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserSummary {
     pub id: u64,
-    pub url: String,
+    pub url: Url,
     pub username: String,
     pub first_name: String,
     pub last_name: String,
@@ -181,14 +181,14 @@ pub struct UserSummary {
 #[derive(Deserialize, Clone, Debug)]
 pub struct Project {
     pub id: u64,
-    pub url: String,
+    pub url: Url,
     pub name: String,
     pub link_name: String,
     pub list_email: String,
     pub list_id: String,
-    pub web_url: Option<String>,
-    pub scm_url: Option<String>,
-    pub webscm_url: Option<String>,
+    pub web_url: Option<Url>,
+    pub scm_url: Option<Url>,
+    pub webscm_url: Option<Url>,
 }
 
 // /api/1.2/patches/
@@ -197,13 +197,13 @@ pub struct Project {
 #[derive(Deserialize, Clone, Debug)]
 pub struct Patch {
     pub id: u64,
-    pub url: String,
+    pub url: Url,
     pub project: Project,
     pub msgid: String,
     pub date: String,
     pub name: String,
     pub commit_ref: Option<String>,
-    pub pull_url: Option<String>,
+    pub pull_url: Option<Url>,
     pub state: String, // TODO enum of possible states
     pub archived: bool,
     pub hash: Option<String>,
@@ -230,10 +230,10 @@ impl Patch {
 pub struct PatchSummary {
     pub date: String,
     pub id: u64,
-    pub mbox: String,
+    pub mbox: Url,
     pub msgid: String,
     pub name: String,
-    pub url: String,
+    pub url: Url,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -242,7 +242,7 @@ pub struct CoverLetter {
     pub id: u64,
     pub msgid: String,
     pub name: String,
-    pub url: String,
+    pub url: Url,
 }
 
 // /api/1.2/series/
@@ -252,7 +252,7 @@ pub struct Series {
     pub cover_letter: Option<CoverLetter>,
     pub date: String,
     pub id: u64,
-    pub mbox: String,
+    pub mbox: Url,
     pub name: Option<String>,
     pub patches: Vec<PatchSummary>,
     pub project: Project,
@@ -260,18 +260,18 @@ pub struct Series {
     pub received_total: u64,
     pub submitter: SubmitterSummary,
     pub total: u64,
-    pub url: String,
+    pub url: Url,
     pub version: u64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct SeriesSummary {
     pub id: u64,
-    pub url: String,
+    pub url: Url,
     pub date: String,
     pub name: Option<String>,
     pub version: u64,
-    pub mbox: String,
+    pub mbox: Url,
 }
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Debug)]
@@ -389,16 +389,15 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn create_server_object() -> Result<(), anyhow::Error> {
-        PatchworkServer::new(PATCHWORK_BASE_URL.to_string(), None, test_get_agent())?;
+    fn create_server_object() -> Result<PatchworkServer, anyhow::Error> {
+        let pws = PatchworkServer::new(Url::parse(&PATCHWORK_BASE_URL)?, None, test_get_agent())?;
 
-        Ok(())
+        Ok(pws)
     }
 
     #[test]
     fn parse_patch() -> Result<(), anyhow::Error> {
-        let server = PatchworkServer::new(PATCHWORK_BASE_URL.to_string(), None, test_get_agent())?;
+        let server = create_server_object()?;
 
         let patch = server.get_patch(GOOD_PATCH_ID)?;
 
@@ -409,7 +408,7 @@ mod tests {
 
     #[test]
     fn parse_series() -> Result<(), anyhow::Error> {
-        let server = PatchworkServer::new(PATCHWORK_BASE_URL.to_string(), None, test_get_agent())?;
+        let server = create_server_object()?;
 
         let series = server.get_series(GOOD_SERIES_ID)?;
 
@@ -419,18 +418,18 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn get_bad_patch() -> () {
-        let server =
-            PatchworkServer::new(PATCHWORK_BASE_URL.to_string(), None, test_get_agent()).unwrap();
-
-        let patch = server.get_patch(u64::MAX).unwrap();
+        match create_server_object().unwrap().get_patch(u64::MAX) {
+            Ok(_) => {
+                panic!("get_patch() succeded on bad patch!")
+            }
+            Err(_) => return (),
+        }
     }
 
     #[test]
     fn parse_series_list() -> Result<(), anyhow::Error> {
-        let server =
-            PatchworkServer::new(PATCHWORK_BASE_URL.to_string(), None, test_get_agent()).unwrap();
+        let server = create_server_object()?;
 
         let list = server.get_series_list(GOOD_PATCHWORK_PROJECT)?;
 

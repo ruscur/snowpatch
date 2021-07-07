@@ -42,6 +42,8 @@ impl GitOps {
             .thread_name(|i| format!("snowpatch{}", i))
             .build()?;
         let workdir = PathBuf::from(work_dir);
+        // Create the work directory in case it doesn't already exist
+        fs::create_dir_all(&workdir)?;
 
         Ok(GitOps {
             repo,
@@ -313,13 +315,16 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
         &[&head_commit],
     )?;
 
-    // TODO this needs to come from the DB from the config.
-    let mut remote = repo.find_remote("gitlab2")?;
+    let remote_list_tree = DB.open_tree(b"remotes to push to")?;
+    let remotes = db_collect_string_values(remote_list_tree.iter())?.0;
 
-    remote.push(
-        &[format!("+HEAD:refs/heads/snowpatch/{}", &id).as_str()],
-        Some(&mut get_git_push_options()?),
-    )?;
+    for remote_name in remotes {
+        let mut remote = repo.find_remote(&remote_name)?;
 
+        remote.push(
+            &[format!("+HEAD:refs/heads/snowpatch/{}", &id).as_str()],
+            Some(&mut get_git_push_options()?),
+        )?;
+    }
     Ok(())
 }

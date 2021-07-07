@@ -13,4 +13,12 @@
         //username: "ruscur",
         //token: "bigchungus42069",
     ),
+    runners: [
+        GitHub(
+            trigger: OnPush(
+                remote: "ruscur"
+            ),
+            url: "https://github.com/ruscur/linux-ci",
+        )
+    ]
 )

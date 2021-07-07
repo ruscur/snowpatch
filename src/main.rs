@@ -1,4 +1,3 @@
-//
 // snowpatch - continuous integration for patch-based workflows
 //
 // Copyright (C) 2021 IBM Corporation
@@ -67,6 +66,8 @@ use crate::git::GitOps;
 
 mod database;
 
+mod runner;
+
 // This is initialised at runtime and globally accessible.
 // Our database is completely thread-safe, so that isn't a problem.
 // Let's not have any more global variables than that.
@@ -124,6 +125,11 @@ fn main() -> Result<()> {
         git.init_worktrees().unwrap();
         git.ingest().unwrap();
     });
+
+    let _runners: Result<Vec<Box<dyn runner::Runner>>, anyhow::Error> = runner::init(
+        config.runners,
+        agent.clone()
+    );
 
     // this does a smoke test on creation.
     let patchwork =

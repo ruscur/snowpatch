@@ -29,6 +29,7 @@ pub struct Config {
     name: String,
     pub git: Git,
     pub patchwork: Patchwork,
+    pub runners: Vec<Runner>,
 }
 
 /// Defines the git details snowpatch needs to push to remotes.
@@ -60,9 +61,21 @@ fn default_workers() -> usize {
 #[derive(Debug, Deserialize)]
 pub struct Patchwork {
     /// URL of the Patchwork server, without port i.e. `https://patchwork.ozlabs.org`
-    pub url: String,
+    pub url: Url,
     /// API token you wish to use on the Patchwork server, only needed if pushing results
     pub token: Option<String>,
+}
+
+// Runners
+#[derive(Debug, Deserialize)]
+pub enum Runner {
+    GitHub { trigger: Trigger, url: Url },
+}
+
+#[derive(Debug, Deserialize)]
+pub enum Trigger {
+    OnPush { remote: String },
+    Manual { data: String },
 }
 
 fn validate_config(config: &Config) -> Result<()> {
@@ -70,9 +83,6 @@ fn validate_config(config: &Config) -> Result<()> {
     File::open(&config.git.public_key).with_context(|| format!("Couldn't open public key file"))?;
     File::open(&config.git.private_key)
         .with_context(|| format!("Couldn't open private key file"))?;
-
-    // Validate URLs
-    Url::parse(&config.patchwork.url).with_context(|| format!("Couldn't parse Patchwork URL"))?;
 
     Ok(())
 }
@@ -103,11 +113,16 @@ mod tests {
                 user: "git".to_owned(),
                 public_key: "/home/ruscur/.ssh/id_rsa.pub".to_owned(),
                 private_key: "/home/ruscur/.ssh/id_rsa".to_owned(),
+                repo: "/home/ruscur/code/linux".to_owned(),
+                workdir: "/home/ruscur/code/snowpatch/workdir".to_owned(),
+                workers: 2,
             },
             patchwork: Patchwork {
-                url: "https://patchwork.ozlabs.org".to_owned(),
+                url: Url::parse("https://patchwork.ozlabs.org").unwrap(),
                 token: None,
             },
+            // TODO
+            runners: vec![],
         };
 
         assert!(validate_config(&good_config).is_ok());
