@@ -2,6 +2,8 @@
 // TODO initial support only targeting public GitHub
 // TODO expecting jobs to spawn rather than manual triggers for now
 use anyhow::{bail, Context, Error, Result};
+use log::debug;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Deserialize;
 use ureq::{Agent, Response};
 use url::Url;
@@ -10,7 +12,7 @@ use super::Runner;
 
 pub struct GitHubActions {
     agent: Agent,
-    api: Url
+    api: Url,
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,7 +90,7 @@ impl GitHubActions {
 
         let gha = GitHubActions {
             agent,
-            api: api_url.clone()
+            api: api_url.clone(),
         };
 
         // Smoke test to check the API URL works
@@ -128,9 +130,7 @@ impl GitHubActions {
             .map_err(|_| Error::msg("URL is boned"))? // URL crate sucks
             .push("actions")
             .push("runs");
-        runs_url
-            .query_pairs_mut()
-            .append_pair("branch", branch);
+        runs_url.query_pairs_mut().append_pair("branch", branch);
 
         Ok(serde_json::from_value(
             self.api_req("GET", &runs_url)?.into_json()?,
@@ -139,12 +139,37 @@ impl GitHubActions {
 }
 
 impl Runner for GitHubActions {
-    fn start_work(&self, _url: Url, _branch_name: String) -> Result<()> {
-        todo!()
+    fn start_work(&self, _url: Url, branch_name: String) -> Result<()> {
+        // TODO no handling of different triggers
+        let trigger_on_push = true;
+
+        if trigger_on_push {
+            // we just need to check that something is happening
+            let wfr = self.get_workflow_runs(&branch_name)?;
+
+            wfr.runs.iter().for_each(|run| {
+                debug!(
+                    "Branch {} with workflow {} has status {:?} and conclusion {:?}",
+                    branch_name, run.name, run.status, run.conclusion
+                );
+            });
+
+            if wfr.runs.is_empty() {
+                bail!(format!("Branch {} has no workflows started!", branch_name));
+            }
+        } else {
+            todo!();
+        }
+
+        Ok(())
     }
 
-    fn get_progress(&self, _url: Url, _branch_name: String) -> Result<String> {
-        todo!()
+    fn get_progress(&self, _url: Url, branch_name: String) -> Result<String> {
+        let wfr = self.get_workflow_runs(&branch_name)?;
+
+        let progress: Vec<Status> = wfr.runs.par_iter().map(|run| run.status).collect();
+
+        Ok("KEKW".to_string())
     }
 
     fn clean_up(&self, _url: Url, _branch_name: String) -> Result<()> {
@@ -158,7 +183,11 @@ mod tests {
     use ureq::Agent;
 
     fn get_gha() -> GitHubActions {
-        GitHubActions::new(Agent::new(), &Url::parse("https://github.com/ruscur/linux-ci").unwrap()).unwrap()
+        GitHubActions::new(
+            Agent::new(),
+            &Url::parse("https://github.com/ruscur/linux-ci").unwrap(),
+        )
+        .unwrap()
     }
 
     #[test]
