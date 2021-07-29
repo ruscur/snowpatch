@@ -16,9 +16,10 @@
     runners: [
         GitHub(
             trigger: OnPush(
-                remote: "ruscur"
+                remote: "ruscurci"
             ),
             url: "https://github.com/ruscur/linux-ci",
+            token: Some("LOL")
         )
     ]
 )

@@ -27,7 +27,7 @@ extern crate serde_json;
 
 extern crate anyhow;
 use anyhow::Result;
-use log::{debug, error, info, log_enabled, warn};
+use log::{debug, error, info, log_enabled, trace, warn};
 
 extern crate url;
 
@@ -67,6 +67,11 @@ use crate::git::GitOps;
 mod database;
 
 mod runner;
+
+mod dispatch;
+use crate::dispatch::Dispatch;
+
+extern crate dyn_clone;
 
 // This is initialised at runtime and globally accessible.
 // Our database is completely thread-safe, so that isn't a problem.
@@ -115,8 +120,8 @@ fn main() -> Result<()> {
     // create the ureq Agent.  this should only be done once.
     // it can be happily cloned between thread contexts.
     let agent: Agent = AgentBuilder::new()
-        .timeout_read(Duration::from_secs(10))
-        .timeout_write(Duration::from_secs(10))
+        .timeout_read(Duration::from_secs(30))
+        .timeout_write(Duration::from_secs(30))
         .build();
 
     let git = GitOps::new(config.git.repo, config.git.workers, config.git.workdir)?;
@@ -126,23 +131,30 @@ fn main() -> Result<()> {
         git.ingest().unwrap();
     });
 
-    let _runners: Result<Vec<Box<dyn runner::Runner>>, anyhow::Error> = runner::init(
-        config.runners,
-        agent.clone()
-    );
+    let runners: Vec<Box<dyn runner::Runner + Send>> = runner::init(config.runners, agent.clone())?;
+
+    for r in runners {
+        rayon::spawn(|| {
+            runner::new_job_watcher(r).unwrap();
+        });
+    }
 
     // this does a smoke test on creation.
     let patchwork =
         PatchworkServer::new(config.patchwork.url, config.patchwork.token, agent.clone())?;
+    let dispatch = Dispatch::new(patchwork.clone());
+    rayon::spawn(move || loop {
+        dispatch.wait_and_send().unwrap_or(());
+    });
     let mut watchcat = Watchcat::new("linuxppc-dev", patchwork);
     watchcat.scan()?;
 
     loop {
-        if log_enabled!(log::Level::Debug) {
+        if log_enabled!(log::Level::Trace) {
             for name in DB.tree_names() {
                 let tree = DB.open_tree(&name)?;
 
-                debug!(
+                trace!(
                     "Tree {} has {} values",
                     String::from_utf8_lossy(&name),
                     tree.iter().count()

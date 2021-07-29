@@ -1,4 +1,3 @@
-use crate::patchwork::{Check, PatchworkServer, Series, TestState};
 /// because cats are better than dogs
 ///
 /// The watchcat exists to monitor state.  It doesn't really care
@@ -7,6 +6,7 @@ use crate::patchwork::{Check, PatchworkServer, Series, TestState};
 ///
 /// The watchcat does not test anything.
 /// It just queues things to be tested, checks in to see if any paper needs pushing,
+use crate::patchwork::{Check, PatchworkServer, Series, TestState};
 use anyhow::{Context, Result};
 use log::{debug, log_enabled};
 use rayon::prelude::*;
@@ -43,7 +43,7 @@ impl Watchcat {
             let tree = DB.open_tree(b"needs testing")?;
 
             // TODO here the value would be more useful information, probably.
-            println!("Inserting {}!", series.id);
+            debug!("Inserting {} into git queue", series.id);
             tree.insert(
                 bincode::serialize(&series.id)?,
                 bincode::serialize(&series.mbox)?,
@@ -55,17 +55,19 @@ impl Watchcat {
 
     fn check_series_list(&self) -> Result<()> {
         let list = self.server.get_series_list(&self.project)?;
+        let tree = DB.open_tree("seen by watchcat")?;
 
         let results: Result<Vec<()>> = list
             .par_iter()
             .filter(|series| series.received_all)
             .filter(|series| series.received_total > 0)
+            .filter(|series| !tree.contains_key(&series.id.to_string()).unwrap_or(false))
             .filter(|series| -> bool {
-                if log_enabled!(log::Level::Debug) {
+                /*                if log_enabled!(log::Level::Debug) {
                     return true;
-                };
-                if let Some(patch_zero) = series.patches.first() {
-                    if let Ok(patch) = self.server.get_patch(patch_zero.id) {
+                }; */
+                if let Some(last_patch) = series.patches.last() {
+                    if let Ok(patch) = self.server.get_patch(last_patch.id) {
                         patch.action_required()
                     } else {
                         false
@@ -75,6 +77,7 @@ impl Watchcat {
                 }
             })
             .map_with(&self.server, |server, series| {
+                tree.insert(&series.id.to_string(), b"hello")?;
                 Watchcat::check_state(server, series)
             })
             .collect();
@@ -85,6 +88,7 @@ impl Watchcat {
     }
 
     pub fn scan(&self) -> Result<()> {
+        debug!("Scanning patchwork for new series...");
         self.check_series_list()
     }
 }

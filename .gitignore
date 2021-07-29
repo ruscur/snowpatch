@@ -18,3 +18,4 @@
 ### snowpatch-specific stuff ###
 
 /database/
+/workdir/

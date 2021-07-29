@@ -69,7 +69,11 @@ pub struct Patchwork {
 // Runners
 #[derive(Debug, Deserialize)]
 pub enum Runner {
-    GitHub { trigger: Trigger, url: Url },
+    GitHub {
+        trigger: Trigger,
+        url: Url,
+        token: Option<String>,
+    },
 }
 
 #[derive(Debug, Deserialize)]

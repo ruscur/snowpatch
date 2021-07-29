@@ -1,17 +1,20 @@
 /// the patchwork module should not track state about any patch
 /// it should handle all direct API interactions and common operations on the objects it returns
 /// basically, if there's any part of snowpatch that could become its own individual library, it's this.
-use anyhow::{Error, Result};
-use log::debug;
+use anyhow::bail;
+use anyhow::{Context, Error, Result};
 use log::log_enabled;
+use log::{debug, warn};
 use rayon::iter::IntoParallelRefIterator;
 use rayon::prelude::*;
 use serde::{self, Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::io::Read;
+use ureq::json;
 use ureq::Agent;
 use url::Url;
 
+#[derive(Clone)]
 pub struct PatchworkServer {
     api: Url,
     token: Option<String>,
@@ -85,7 +88,8 @@ impl PatchworkServer {
         series_list_url
             .query_pairs_mut()
             .append_pair("order", "-id") // newest series at the top
-            .append_pair("per_page", "250") // this is max for ozlabs.org
+            .append_pair("per_page", "8") // this is max for ozlabs.org XXX TODO 250 is max
+            .append_pair("page", "3")
             .append_pair("project", project);
 
         let resp = self.agent.request_url("GET", &series_list_url).call()?;
@@ -132,6 +136,52 @@ impl PatchworkServer {
         } else {
             Ok(TestState::Success)
         }
+    }
+
+    pub fn send_check(&self, series: u64, result: &TestResult) -> Result<()> {
+        if self.token.is_none() {
+            warn!(
+                "Couldn't send result for {} since we don't have a token.",
+                series
+            );
+            return Ok(());
+        }
+
+        let series = self.get_series(series)?;
+        let patch = series
+            .patches
+            .last()
+            .context("We got this far with a series with no patches?")?;
+        let encoded = serde_json::to_value(&result)?;
+
+        let mut check_url = self.api.clone();
+
+        check_url
+            .path_segments_mut()
+            .map_err(|_| Error::msg("URL is boned"))? // URL crate sucks
+            .push("patches")
+            .push(&patch.id.to_string())
+            .push("checks");
+
+        // Why yes, I did just use a URL construction API, which is complete overkill,
+        // just to have to manually append a trailing slash.
+        // Patchwork is love.  Patchwork is life.
+        let check_url = format!("{}/", check_url.to_string());
+
+        let resp = self
+            .agent
+            .request("POST", &check_url)
+            .set("Accept", "application/json")
+            .set(
+                "Authorization",
+                &format!("Token {}", self.token.as_ref().unwrap()),
+            )
+            .send_json(encoded)?
+            .into_string()?;
+
+        dbg!(resp);
+
+        Ok(())
     }
 }
 
@@ -351,9 +401,13 @@ mod tests {
 
     fn test_get_agent() -> Agent {
         AgentBuilder::new()
-            .timeout_read(Duration::from_secs(10))
-            .timeout_write(Duration::from_secs(10))
+            .timeout_read(Duration::from_secs(30))
+            .timeout_write(Duration::from_secs(90))
             .build()
+    }
+
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
     }
 
     #[test]
@@ -436,5 +490,24 @@ mod tests {
         assert_eq!(list.len(), 250);
 
         Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn send_check() -> Result<(), anyhow::Error> {
+        let token = "PUT TOKEN HERE".to_string();
+        let server = PatchworkServer::new(
+            Url::parse(&PATCHWORK_BASE_URL)?,
+            Some(token),
+            test_get_agent(),
+        )?;
+        let result = TestResult {
+            state: TestState::Success,
+            target_url: None,
+            description: None,
+            context: None,
+        };
+
+        server.send_check(GOOD_SERIES_ID, &result)
     }
 }

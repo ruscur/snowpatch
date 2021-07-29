@@ -281,7 +281,7 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
     let diff = Diff::from_buffer(&mbox)?;
 
     let deltacount = diff.deltas().count();
-    println!(
+    debug!(
         "I'm thread {} with series {} with {} deltas",
         worker_id, id, deltacount
     );
@@ -316,15 +316,20 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
     )?;
 
     let remote_list_tree = DB.open_tree(b"remotes to push to")?;
-    let remotes = db_collect_string_values(remote_list_tree.iter())?.0;
+    let runners = db_collect_string_values(remote_list_tree.iter())?;
 
-    for remote_name in remotes {
-        let mut remote = repo.find_remote(&remote_name)?;
+    // only do this for OnPush? otherwise update different tree
+    for (remote, runner) in runners {
+        let mut remote = repo.find_remote(&remote)?;
 
         remote.push(
             &[format!("+HEAD:refs/heads/snowpatch/{}", &id).as_str()],
             Some(&mut get_git_push_options()?),
         )?;
+
+        let runner_queue_tree = DB.open_tree(format!("{} queue", runner))?;
+        runner_queue_tree.insert(&id.to_string(), b"new")?;
     }
+
     Ok(())
 }
