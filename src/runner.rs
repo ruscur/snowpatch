@@ -41,6 +41,7 @@ pub struct RunnerResult {
     pub state: JobState,
     pub outcome: Option<TestState>,
     pub url: Option<Url>, // user-facing results URL
+    pub description: Option<String>,
 }
 
 // Exceedingly cursed type signature

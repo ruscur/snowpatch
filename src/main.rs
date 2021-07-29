@@ -144,7 +144,7 @@ fn main() -> Result<()> {
         PatchworkServer::new(config.patchwork.url, config.patchwork.token, agent.clone())?;
     let dispatch = Dispatch::new(patchwork.clone());
     rayon::spawn(move || loop {
-        dispatch.wait_and_send().unwrap_or(());
+        dispatch.wait_and_send().unwrap();
     });
     let mut watchcat = Watchcat::new("linuxppc-dev", patchwork);
     watchcat.scan()?;

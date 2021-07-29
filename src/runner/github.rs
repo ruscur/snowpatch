@@ -18,7 +18,7 @@ pub struct GitHubActions {
     token: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 enum Conclusion {
     #[serde(rename = "action_required")]
     ActionRequired,
@@ -37,7 +37,7 @@ enum Conclusion {
     #[serde(rename = "timed_out")]
     TimedOut,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 enum Status {
     #[serde(rename = "queued")]
     Queued,
@@ -53,54 +53,10 @@ struct WorkflowRun {
     artifacts_url: Url,
     cancel_url: Url,
     html_url: Url, // not an API URL, for users
+    jobs_url: Url,
     conclusion: Option<Conclusion>,
     status: Status,
     name: String,
-}
-
-impl WorkflowRun {
-    fn to_runner_result(&self) -> RunnerResult {
-        RunnerResult {
-            name: self.name.clone(),
-            state: match self.status {
-                Status::Queued => JobState::Waiting,
-                Status::InProgress => JobState::Running,
-                Status::Completed => {
-                    match &self.conclusion {
-                        Some(c) => {
-                            match c {
-                                Conclusion::ActionRequired => JobState::Failed,
-                                Conclusion::Cancelled => JobState::Failed,
-                                Conclusion::Failure => JobState::Completed,
-                                Conclusion::Neutral => JobState::Completed,
-                                Conclusion::Success => JobState::Completed,
-                                Conclusion::Skipped => JobState::Failed, // XXX
-                                Conclusion::Stale => JobState::Failed,
-                                Conclusion::TimedOut => JobState::Failed,
-                            }
-                        }
-                        None => JobState::Failed,
-                    }
-                }
-            },
-            outcome: match &self.conclusion {
-                Some(c) => {
-                    match c {
-                        Conclusion::ActionRequired => Some(TestState::Warning), // XXX
-                        Conclusion::Cancelled => Some(TestState::Fail),
-                        Conclusion::Failure => Some(TestState::Fail),
-                        Conclusion::Neutral => Some(TestState::Warning),
-                        Conclusion::Success => Some(TestState::Success),
-                        Conclusion::Skipped => Some(TestState::Warning),
-                        Conclusion::Stale => Some(TestState::Warning),
-                        Conclusion::TimedOut => Some(TestState::Fail),
-                    }
-                }
-                None => None,
-            },
-            url: Some(self.html_url.clone()),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,6 +65,30 @@ struct WorkflowRuns {
     count: u64,
     #[serde(rename = "workflow_runs")]
     runs: Vec<WorkflowRun>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Step {
+    conclusion: Conclusion,
+    name: String,
+    number: u64,
+    status: Status,
+}
+
+#[derive(Debug, Deserialize)]
+struct Job {
+    name: String,
+    steps: Vec<Step>,
+    url: Url,
+    html_url: Url,
+    conclusion: Conclusion,
+}
+
+#[derive(Debug, Deserialize)]
+struct Jobs {
+    jobs: Vec<Job>,
+    #[serde(rename = "total_count")]
+    count: u64,
 }
 
 impl GitHubActions {
@@ -176,7 +156,14 @@ impl GitHubActions {
         Ok(branch_url)
     }
 
-    fn get_workflow_runs(&self, branch: &str) -> Result<WorkflowRuns> {
+    /// Get a WorkflowRun from its API URL.
+    fn get_workflow_run(&self, run_url: &Url) -> Result<WorkflowRun> {
+        Ok(serde_json::from_value(
+            self.api_req("GET", &run_url)?.into_json()?,
+        )?)
+    }
+
+    fn get_workflow_runs_for_branch(&self, branch: &str) -> Result<WorkflowRuns> {
         let mut runs_url = self.api.clone();
         runs_url
             .path_segments_mut()
@@ -188,6 +175,125 @@ impl GitHubActions {
         Ok(serde_json::from_value(
             self.api_req("GET", &runs_url)?.into_json()?,
         )?)
+    }
+
+    fn get_jobs(&self, jobs_url: &Url) -> Result<Jobs> {
+        Ok(serde_json::from_value(
+            self.api_req("GET", &jobs_url)?.into_json()?,
+        )?)
+    }
+
+    fn build_run_description(&self, wfr: &WorkflowRun) -> Result<String> {
+        let jobs = self.get_jobs(&wfr.jobs_url)?;
+        let conclusion = wfr
+            .conclusion
+            .as_ref()
+            .context("Couldn't get conclusion on completed run")?;
+
+        let desc = match conclusion {
+            Conclusion::ActionRequired => {
+                String::from("Job couldn't complete without manual intervention.")
+            }
+            Conclusion::Cancelled => String::from("Job cancelled."),
+            Conclusion::Failure => {
+                let failures: Vec<&Job> = jobs
+                    .jobs
+                    .par_iter()
+                    .filter(|j| j.conclusion == Conclusion::Failure)
+                    .collect();
+                let failure_count = failures.len();
+
+                if failure_count == 0 {
+                    error!("Run reports Failure but jobs have no failures?");
+                    debug!("{:?}", jobs);
+                    bail!("Run reported Failure but couldn't find failures in jobs");
+                } else if failure_count > 1 {
+                    format!("{} of {} jobs failed.", failure_count, jobs.count)
+                } else {
+                    let failed_job = failures.first().context("Rust can't count.")?;
+                    let failed_steps: Vec<&Step> = failed_job
+                        .steps
+                        .iter()
+                        .filter(|s| s.conclusion == Conclusion::Failure)
+                        .collect();
+
+                    if failed_steps.len() == 1 {
+                        let step = failed_steps.first().unwrap();
+                        format!("{} failed at step {}.", failed_job.name, step.name)
+                    } else {
+                        format!(
+                            "{} failed {} of {} steps.",
+                            failed_job.name,
+                            failed_steps.len(),
+                            failed_job.steps.len()
+                        )
+                    }
+                }
+            }
+            Conclusion::Neutral => todo!(),
+            Conclusion::Success => format!("Successfully ran {} jobs.", jobs.count),
+            Conclusion::Skipped => String::from("Job skipped."),
+            Conclusion::Stale => String::from("Job stale.  Dunno what that means."),
+            Conclusion::TimedOut => String::from("Job timed out."),
+        };
+
+        Ok(desc)
+    }
+
+    fn wfr_to_runner_result(&self, wfr: &WorkflowRun) -> RunnerResult {
+        RunnerResult {
+            name: wfr.name.clone(),
+            state: match wfr.status {
+                Status::Queued => JobState::Waiting,
+                Status::InProgress => JobState::Running,
+                Status::Completed => {
+                    match &wfr.conclusion {
+                        Some(c) => {
+                            match c {
+                                Conclusion::ActionRequired => JobState::Failed,
+                                Conclusion::Cancelled => JobState::Failed,
+                                Conclusion::Failure => JobState::Completed,
+                                Conclusion::Neutral => JobState::Completed,
+                                Conclusion::Success => JobState::Completed,
+                                Conclusion::Skipped => JobState::Failed, // XXX
+                                Conclusion::Stale => JobState::Failed,
+                                Conclusion::TimedOut => JobState::Failed,
+                            }
+                        }
+                        None => JobState::Failed,
+                    }
+                }
+            },
+            outcome: match &wfr.conclusion {
+                Some(c) => {
+                    match c {
+                        Conclusion::ActionRequired => Some(TestState::Warning), // XXX
+                        Conclusion::Cancelled => Some(TestState::Fail),
+                        Conclusion::Failure => Some(TestState::Fail),
+                        Conclusion::Neutral => Some(TestState::Warning),
+                        Conclusion::Success => Some(TestState::Success),
+                        Conclusion::Skipped => Some(TestState::Warning),
+                        Conclusion::Stale => Some(TestState::Warning),
+                        Conclusion::TimedOut => Some(TestState::Fail),
+                    }
+                }
+                None => None,
+            },
+            url: Some(wfr.html_url.clone()),
+            description: {
+                if wfr.status != Status::Completed {
+                    None
+                } else {
+                    match self.build_run_description(wfr) {
+                        Ok(desc) => Some(desc),
+                        Err(e) => {
+                            error!("Failed to build description: {}", e.to_string());
+                            None
+                        }
+                    }
+                }
+            },
+        }
     }
 }
 
@@ -204,7 +310,7 @@ impl Runner for GitHubActions {
             // we just need to check that something is happening
             let timeout = Duration::from_secs(600);
             let start = Instant::now();
-            let mut wfr = self.get_workflow_runs(&branch_name)?;
+            let mut wfr = self.get_workflow_runs_for_branch(&branch_name)?;
             while Instant::now().duration_since(start) < timeout {
                 if wfr.runs.is_empty() {
                     warn!("Branch {} has no workflows started!", branch_name);
@@ -212,7 +318,7 @@ impl Runner for GitHubActions {
                     break;
                 }
                 thread::sleep(Duration::from_secs(30));
-                wfr = self.get_workflow_runs(&branch_name)?;
+                wfr = self.get_workflow_runs_for_branch(&branch_name)?;
             }
 
             // TODO no handling of timeout failure case
@@ -232,12 +338,12 @@ impl Runner for GitHubActions {
     }
 
     fn get_progress(&self, branch_name: &String, _url: Option<&Url>) -> Result<Vec<RunnerResult>> {
-        let wfr = self.get_workflow_runs(&branch_name)?;
+        let wfr = self.get_workflow_runs_for_branch(&branch_name)?;
 
         let progress: Vec<RunnerResult> = wfr
             .runs
             .par_iter()
-            .map(|run| run.to_runner_result())
+            .map(|run| self.wfr_to_runner_result(run))
             .collect();
 
         Ok(progress)
@@ -256,7 +362,7 @@ mod tests {
     fn get_gha() -> GitHubActions {
         GitHubActions::new(
             Agent::new(),
-            &Url::parse("https://github.com/ruscur/linux-ci").unwrap(),
+            &Url::parse("https://github.com/linuxppc/linux-ci").unwrap(),
             None,
         )
         .unwrap()
@@ -266,7 +372,7 @@ mod tests {
     fn get_actions() -> Result<()> {
         let gha = get_gha();
 
-        let wfr: WorkflowRuns = gha.get_workflow_runs("snowpatch/254076")?;
+        let wfr: WorkflowRuns = gha.get_workflow_runs_for_branch("snowpatch/254076")?;
 
         println!("Found {} workflow runs.", wfr.count);
 
@@ -276,7 +382,7 @@ mod tests {
                 run.name,
                 run.status,
                 run.conclusion,
-                run.to_runner_result()
+                gha.wfr_to_runner_result(&run)
             );
         });
 
@@ -297,6 +403,20 @@ mod tests {
 
         println!("{:?}", jobs);
         println!("{:?}", finished_jobs);
+
+        Ok(())
+    }
+
+    #[test]
+    fn build_description_for_failure() -> Result<()> {
+        let gha = get_gha();
+
+        let failed_run = gha.get_workflow_run(
+            &Url::parse("https://api.github.com/repos/linuxppc/linux-ci/actions/runs/990193337")
+                .unwrap(),
+        )?;
+
+        println!("{}", gha.build_run_description(&failed_run)?);
 
         Ok(())
     }

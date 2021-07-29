@@ -320,12 +320,20 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
 
     // only do this for OnPush? otherwise update different tree
     for (remote, runner) in runners {
-        let mut remote = repo.find_remote(&remote)?;
+        let mut remote: git2::Remote = repo.find_remote(&remote)?;
 
-        remote.push(
-            &[format!("+HEAD:refs/heads/snowpatch/{}", &id).as_str()],
+        // XXX
+        let push_result = remote.push(
+            &[format!("HEAD:refs/heads/snowpatch/{}", &id).as_str()],
             Some(&mut get_git_push_options()?),
-        )?;
+        );
+
+        match push_result {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Couldn't push: {}", e.to_string());
+            }
+        }
 
         let runner_queue_tree = DB.open_tree(format!("{} queue", runner))?;
         runner_queue_tree.insert(&id.to_string(), b"new")?;

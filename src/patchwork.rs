@@ -3,8 +3,8 @@
 /// basically, if there's any part of snowpatch that could become its own individual library, it's this.
 use anyhow::bail;
 use anyhow::{Context, Error, Result};
-use log::log_enabled;
 use log::{debug, warn};
+use log::{error, log_enabled};
 use rayon::iter::IntoParallelRefIterator;
 use rayon::prelude::*;
 use serde::{self, Deserialize, Serialize, Serializer};
@@ -88,16 +88,13 @@ impl PatchworkServer {
         series_list_url
             .query_pairs_mut()
             .append_pair("order", "-id") // newest series at the top
-            .append_pair("per_page", "8") // this is max for ozlabs.org XXX TODO 250 is max
-            .append_pair("page", "3")
+            .append_pair("per_page", "250") // this is max for ozlabs.org
             .append_pair("project", project);
 
         let resp = self.agent.request_url("GET", &series_list_url).call()?;
 
         Ok(serde_json::from_value(resp.into_json()?)?)
     }
-
-    //pub fn get_patch_state(&self, patch: u64) -> Result<Vec<TestResult>>;
 
     pub fn get_patch_checks(&self, patch: u64) -> Result<Vec<Check>> {
         let mut patch_checks_url = self.api.clone();
@@ -152,6 +149,7 @@ impl PatchworkServer {
             .patches
             .last()
             .context("We got this far with a series with no patches?")?;
+
         let encoded = serde_json::to_value(&result)?;
 
         let mut check_url = self.api.clone();
@@ -168,6 +166,25 @@ impl PatchworkServer {
         // Patchwork is love.  Patchwork is life.
         let check_url = format!("{}/", check_url.to_string());
 
+        // duplicate protection
+        let checks: Vec<Check> = serde_json::from_value(
+            self.agent
+                .get(&check_url)
+                .set("Accept", "application/json")
+                .call()?
+                .into_json()?,
+        )?;
+
+        if checks.iter().find(|check| {
+            check.context.eq(encoded.get("context").unwrap())
+        }).is_some() {
+            warn!(
+                "Not sending {:?}, check with same context already exists.", result.context
+            );
+            return Ok(())
+        }
+
+        // Send it off
         let resp = self
             .agent
             .request("POST", &check_url)
@@ -176,10 +193,16 @@ impl PatchworkServer {
                 "Authorization",
                 &format!("Token {}", self.token.as_ref().unwrap()),
             )
-            .send_json(encoded)?
-            .into_string()?;
+            .send_json(encoded);
 
-        dbg!(resp);
+        match resp {
+            Ok(_) => {}
+            Err(ureq::Error::Status(code, resp)) => {
+                error!("{} {}", code, resp.into_string()?);
+                bail!("Error sending check to patch {}", &patch.id);
+            }
+            Err(e) => bail!(e),
+        }
 
         Ok(())
     }
@@ -369,7 +392,20 @@ impl TestResult {
     where
         S: Serializer,
     {
-        if context.is_none() {
+        if let Some(ctx) = context {
+            // Context can only contain alphanumeric ASCII characters, '-' and '_'.
+            // So we'd better ruin any fun.
+            let fixed_ctx = ctx.chars().map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    // Congrats buddy, you're an underscore now.
+                    '_'
+                }
+            }).collect::<String>();
+
+            serde::Serialize::serialize(&Some(fixed_ctx), ser)
+        } else {
             serde::Serialize::serialize(
                 &Some(
                     format!("{}-{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
@@ -378,8 +414,6 @@ impl TestResult {
                 ),
                 ser,
             )
-        } else {
-            serde::Serialize::serialize(context, ser)
         }
     }
 }
@@ -493,7 +527,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn send_check() -> Result<(), anyhow::Error> {
         let token = "PUT TOKEN HERE".to_string();
         let server = PatchworkServer::new(
@@ -505,7 +538,7 @@ mod tests {
             state: TestState::Success,
             target_url: None,
             description: None,
-            context: None,
+            context: Some("snowpatch-0.9.0".to_string()),
         };
 
         server.send_check(GOOD_SERIES_ID, &result)

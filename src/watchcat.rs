@@ -63,9 +63,6 @@ impl Watchcat {
             .filter(|series| series.received_total > 0)
             .filter(|series| !tree.contains_key(&series.id.to_string()).unwrap_or(false))
             .filter(|series| -> bool {
-                /*                if log_enabled!(log::Level::Debug) {
-                    return true;
-                }; */
                 if let Some(last_patch) = series.patches.last() {
                     if let Ok(patch) = self.server.get_patch(last_patch.id) {
                         patch.action_required()

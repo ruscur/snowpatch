@@ -32,6 +32,8 @@ impl Dispatch {
                 let job_name = job_name.join(" ");
                 let job_result: RunnerResult = bincode::deserialize(&value)?;
 
+                let context: String = format!("{}-{}", handle, job_name);
+
                 if let Some(state) = job_result.outcome {
                     let check_to_send = TestResult {
                         state,
@@ -39,8 +41,8 @@ impl Dispatch {
                             Some(url) => Some(url.to_string()),
                             None => None,
                         },
-                        description: Some(format!("Job {} from runner {}", job_name, handle)),
-                        context: None,
+                        description: job_result.description,
+                        context: Some(context),
                     };
 
                     self.server
