@@ -166,10 +166,8 @@ impl GitOps {
                 });
             }
 
-            let sub = inbound.watch_prefix(vec![]);
-            // blocks until there's an update to the tree
-            for _ in sub.take(1) {}
-            // maybe we have data to care about now.
+            // wait until there's more stuff to do
+            wait_for_tree(&inbound);
         }
     }
 }
@@ -331,7 +329,15 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
         match push_result {
             Ok(_) => (),
             Err(e) => {
-                error!("Couldn't push: {}", e.to_string());
+                if e.code() == git2::ErrorCode::NotFastForward {
+                    // this is the easiest way to figure out the branch already exists.
+                    // if we push again, all the jobs will trigger again.
+                    // this creates a lot of duplicate work.
+                    // for now, just let it happen, cap'n.
+                    warn!("Remote branch already existed, letting it fly...");
+                } else {
+                    bail!("Couldn't push: {}", e.to_string());
+                }
             }
         }
 
