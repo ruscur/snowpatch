@@ -241,14 +241,29 @@ fn clean_and_reset(repo: &Repository, branch_name: &str) -> Result<()> {
     Ok(())
 }
 
+// Yeah, this function sucks.  There's a lot of type and borrow checker fighting here.
 fn get_git_push_options() -> Result<PushOptions<'static>> {
     let mut callbacks = RemoteCallbacks::new();
 
-    callbacks.credentials(|_url, username, _allowed_types| {
+    let public_key_path = String::from_utf8_lossy(
+        &DB.get(b"ssh public key path")?
+            .context("Couldn't find SSH public key path in database")?,
+    )
+    .to_string();
+    let private_key_path = String::from_utf8_lossy(
+        &DB.get(b"ssh private key path")?
+            .context("Couldn't find SSH private key path in database")?,
+    )
+    .to_string();
+
+    callbacks.credentials(move |_url, username, _allowed_types| {
+        let public_key_path = public_key_path.clone();
+        let private_key_path = private_key_path.clone();
+
         Cred::ssh_key(
             username.unwrap_or("git"),
-            None,
-            Path::new("/home/ruscur/.ssh/id_rsa"),
+            Some(&PathBuf::from(public_key_path)),
+            &PathBuf::from(private_key_path),
             None,
         )
     });
@@ -289,7 +304,13 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
 
     repo.apply(&diff, git2::ApplyLocation::Both, None)?;
     let sig = repo.signature()?;
-    let msg = format!("From patchwork series {}", &id);
+
+    let url_prefix: String = String::from_utf8_lossy(
+        &DB.get("patchwork series link prefix")?
+            .context("Couldn't find Patchwork series link prefix in database")?,
+    )
+    .to_string();
+    let msg = format!("From patchwork series {0}\n\n{1}{0}", &id, url_prefix);
     let head_commit = repo
         .head()?
         .resolve()?

@@ -15,13 +15,17 @@
 //
 
 // standard library
-use std::fs::File;
+use std::{env, fs::File, path::PathBuf};
 
 // third party dependencies
 use anyhow::{Context, Result};
+use dirs::home_dir;
 use ron::de::from_reader;
 use serde::Deserialize;
 use url::Url;
+
+// snowpatch stuff
+use crate::DB;
 
 /// Defines the full set of information snowpatch needs in order to do anything useful.
 #[derive(Debug, Deserialize)]
@@ -39,9 +43,13 @@ pub struct Git {
     /// The user on the remote, typically `git` for most services, as in `git@github.com:ruscur/snowpatch.git`
     user: String,
     /// Full path to the public key, for example `/home/ruscur/.ssh/id_rsa.pub`
-    public_key: String,
+    /// Defaults to `~/.ssh/id_rsa.pub`
+    #[serde(default = "default_public_key")]
+    public_key: PathBuf,
     /// Full path to the private key, for example `/home/ruscur/.ssh/id_rsa`
-    private_key: String,
+    /// Defaults to `~/.ssh/id_rsa`
+    #[serde(default = "default_private_key")]
+    private_key: PathBuf,
     /// Full path of the git repo to work with
     pub repo: String,
     /// Path that you want snowpatch to make git worktrees in
@@ -49,6 +57,24 @@ pub struct Git {
     /// Max number of worktrees created at once
     #[serde(default = "default_workers")]
     pub workers: usize,
+}
+
+fn default_public_key() -> PathBuf {
+    let mut path: PathBuf = dirs::home_dir().unwrap_or(PathBuf::from("/"));
+
+    path.push(".ssh");
+    path.push("id_rsa.pub");
+
+    path
+}
+
+fn default_private_key() -> PathBuf {
+    let mut path: PathBuf = dirs::home_dir().unwrap_or(PathBuf::from("/"));
+
+    path.push(".ssh");
+    path.push("id_rsa");
+
+    path
 }
 
 fn default_workers() -> usize {
@@ -64,6 +90,13 @@ pub struct Patchwork {
     pub url: Url,
     /// API token you wish to use on the Patchwork server, only needed if pushing results
     pub token: Option<String>,
+    /// Number of series to request at a time.  Defaults to 50.
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+}
+
+fn default_page_size() -> u64 {
+    50
 }
 
 // Runners
@@ -84,9 +117,38 @@ pub enum Trigger {
 
 fn validate_config(config: &Config) -> Result<()> {
     // Validate paths
-    File::open(&config.git.public_key).with_context(|| format!("Couldn't open public key file"))?;
-    File::open(&config.git.private_key)
-        .with_context(|| format!("Couldn't open private key file"))?;
+    File::open(&config.git.public_key).context("Couldn't open public key file")?;
+    File::open(&config.git.private_key).context("Couldn't open private key file")?;
+
+    Ok(())
+}
+
+/// Puts some static values in the database.
+fn populate_database(config: &Config) -> Result<()> {
+    DB.insert(
+        "ssh private key path",
+        config
+            .git
+            .private_key
+            .to_str()
+            .context("Something went wrong with SSH private key path")?,
+    )?;
+    DB.insert(
+        "ssh public key path",
+        config
+            .git
+            .public_key
+            .to_str()
+            .context("Something went wrong with SSH public key path")?,
+    )?;
+    DB.insert(
+        "patchwork series link prefix",
+        format!(
+            "{}/project/{}/list/?series=",
+            config.patchwork.url, config.name
+        )
+        .as_bytes(),
+    )?;
 
     Ok(())
 }
@@ -102,6 +164,8 @@ pub fn parse_config(filename: &str) -> Result<Config> {
 
     validate_config(&config)?;
 
+    populate_database(&config)?;
+
     Ok(config)
 }
 
@@ -115,8 +179,8 @@ mod tests {
             name: "linuxppc-dev".to_owned(),
             git: Git {
                 user: "git".to_owned(),
-                public_key: "/home/ruscur/.ssh/id_rsa.pub".to_owned(),
-                private_key: "/home/ruscur/.ssh/id_rsa".to_owned(),
+                public_key: default_public_key(),
+                private_key: default_private_key(),
                 repo: "/home/ruscur/code/linux".to_owned(),
                 workdir: "/home/ruscur/code/snowpatch/workdir".to_owned(),
                 workers: 2,
@@ -124,10 +188,13 @@ mod tests {
             patchwork: Patchwork {
                 url: Url::parse("https://patchwork.ozlabs.org").unwrap(),
                 token: None,
+                page_size: default_page_size(),
             },
             // TODO
             runners: vec![],
         };
+
+        println!("{:?}", good_config);
 
         assert!(validate_config(&good_config).is_ok());
     }

@@ -73,6 +73,8 @@ use crate::dispatch::Dispatch;
 
 extern crate dyn_clone;
 
+extern crate dirs;
+
 // This is initialised at runtime and globally accessible.
 // Our database is completely thread-safe, so that isn't a problem.
 // Let's not have any more global variables than that.
@@ -140,8 +142,12 @@ fn main() -> Result<()> {
     }
 
     // this does a smoke test on creation.
-    let patchwork =
-        PatchworkServer::new(config.patchwork.url, config.patchwork.token, agent.clone())?;
+    let patchwork = PatchworkServer::new(
+        config.patchwork.url,
+        config.patchwork.token,
+        agent.clone(),
+        config.patchwork.page_size,
+    )?;
     let dispatch = Dispatch::new(patchwork.clone());
     rayon::spawn(move || loop {
         dispatch.wait_and_send().unwrap();

@@ -19,10 +19,16 @@ pub struct PatchworkServer {
     api: Url,
     token: Option<String>,
     agent: Agent,
+    page_size: u64,
 }
 
 impl PatchworkServer {
-    pub fn new(url: Url, token: Option<String>, agent: Agent) -> Result<PatchworkServer> {
+    pub fn new(
+        url: Url,
+        token: Option<String>,
+        agent: Agent,
+        page_size: u64,
+    ) -> Result<PatchworkServer> {
         let mut api_url = url.clone();
 
         api_url
@@ -35,6 +41,7 @@ impl PatchworkServer {
             api: api_url,
             token,
             agent,
+            page_size,
         };
 
         server.smoke_test()?;
@@ -88,7 +95,7 @@ impl PatchworkServer {
         series_list_url
             .query_pairs_mut()
             .append_pair("order", "-id") // newest series at the top
-            .append_pair("per_page", "250") // this is max for ozlabs.org
+            .append_pair("per_page", &self.page_size.to_string())
             .append_pair("project", project);
 
         let resp = self.agent.request_url("GET", &series_list_url).call()?;
@@ -175,13 +182,16 @@ impl PatchworkServer {
                 .into_json()?,
         )?;
 
-        if checks.iter().find(|check| {
-            check.context.eq(encoded.get("context").unwrap())
-        }).is_some() {
+        if checks
+            .iter()
+            .find(|check| check.context.eq(encoded.get("context").unwrap()))
+            .is_some()
+        {
             warn!(
-                "Not sending {:?}, check with same context already exists.", result.context
+                "Not sending {:?}, check with same context already exists.",
+                result.context
             );
-            return Ok(())
+            return Ok(());
         }
 
         // Send it off
@@ -395,14 +405,17 @@ impl TestResult {
         if let Some(ctx) = context {
             // Context can only contain alphanumeric ASCII characters, '-' and '_'.
             // So we'd better ruin any fun.
-            let fixed_ctx = ctx.chars().map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    // Congrats buddy, you're an underscore now.
-                    '_'
-                }
-            }).collect::<String>();
+            let fixed_ctx = ctx
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                        c
+                    } else {
+                        // Congrats buddy, you're an underscore now.
+                        '_'
+                    }
+                })
+                .collect::<String>();
 
             serde::Serialize::serialize(&Some(fixed_ctx), ser)
         } else {
@@ -432,6 +445,7 @@ mod tests {
     static GOOD_PATCHWORK_PROJECT: &'static str = "linuxppc-dev";
     static GOOD_PATCH_ID: u64 = 552023;
     static GOOD_SERIES_ID: u64 = 13675;
+    static PATCHWORK_PAGE_SIZE: u64 = 250;
 
     fn test_get_agent() -> Agent {
         AgentBuilder::new()
@@ -478,7 +492,12 @@ mod tests {
     }
 
     fn create_server_object() -> Result<PatchworkServer, anyhow::Error> {
-        let pws = PatchworkServer::new(Url::parse(&PATCHWORK_BASE_URL)?, None, test_get_agent())?;
+        let pws = PatchworkServer::new(
+            Url::parse(&PATCHWORK_BASE_URL)?,
+            None,
+            test_get_agent(),
+            PATCHWORK_PAGE_SIZE,
+        )?;
 
         Ok(pws)
     }
@@ -521,7 +540,7 @@ mod tests {
 
         let list = server.get_series_list(GOOD_PATCHWORK_PROJECT)?;
 
-        assert_eq!(list.len(), 250);
+        assert_eq!(list.len() as u64, PATCHWORK_PAGE_SIZE);
 
         Ok(())
     }
@@ -533,6 +552,7 @@ mod tests {
             Url::parse(&PATCHWORK_BASE_URL)?,
             Some(token),
             test_get_agent(),
+            PATCHWORK_PAGE_SIZE,
         )?;
         let result = TestResult {
             state: TestState::Success,
