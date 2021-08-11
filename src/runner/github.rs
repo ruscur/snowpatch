@@ -34,6 +34,8 @@ enum Conclusion {
     Skipped,
     #[serde(rename = "stale")]
     Stale,
+    #[serde(rename = "startup_failure")]
+    StartupFailure,
     #[serde(rename = "timed_out")]
     TimedOut,
 }
@@ -235,6 +237,7 @@ impl GitHubActions {
             Conclusion::Skipped => String::from("Job skipped."),
             Conclusion::Stale => String::from("Job stale.  Dunno what that means."),
             Conclusion::TimedOut => String::from("Job timed out."),
+            Conclusion::StartupFailure => String::from("GitHub is having a moment."),
         };
 
         Ok(desc)
@@ -258,6 +261,7 @@ impl GitHubActions {
                                 Conclusion::Skipped => JobState::Failed, // XXX
                                 Conclusion::Stale => JobState::Failed,
                                 Conclusion::TimedOut => JobState::Failed,
+                                Conclusion::StartupFailure => JobState::Failed,
                             }
                         }
                         None => JobState::Failed,
@@ -275,6 +279,7 @@ impl GitHubActions {
                         Conclusion::Skipped => Some(TestState::Warning),
                         Conclusion::Stale => Some(TestState::Warning),
                         Conclusion::TimedOut => Some(TestState::Fail),
+                        Conclusion::StartupFailure => Some(TestState::Fail),
                     }
                 }
                 None => None,
