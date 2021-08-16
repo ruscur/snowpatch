@@ -333,7 +333,7 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
     // We (hopefully) now have exclusive access to the worktree.
     let mut worktree_path = workdir.clone();
     worktree_path.push(format!("snowpatch{}", worker_id));
-    let repo = Repository::open(&worktree_path)?;
+    let mut repo = Repository::open(&worktree_path)?;
 
     clean_and_reset(&repo, "master")?;
 
@@ -357,7 +357,9 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
             // There's a disappointingly large chance that a series that won't
             // apply with git2 will actually apply just fine with the binary.
             // So let's do that instead.
+            drop(repo);
             git_binary_apply_mbox(&worktree_path, &mbox)?;
+            repo = Repository::open(&worktree_path)?;
         }
     }
 
