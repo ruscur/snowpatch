@@ -295,9 +295,8 @@ fn git_binary_apply_mbox(workdir: &Path, mbox: &Vec<u8>) -> Result<()> {
         .wait_with_output()
         .expect("Couldn't read stdout");
 
-    println!("{}", String::from_utf8_lossy(&output.stdout));
-
     if !output.status.success() {
+        debug!("{}", String::from_utf8_lossy(&output.stdout));
         bail!("Series doesn't apply with git binary either.")
     }
 
@@ -318,9 +317,8 @@ fn git_binary_apply_mbox(workdir: &Path, mbox: &Vec<u8>) -> Result<()> {
         .wait_with_output()
         .expect("Couldn't read stdout");
 
-    println!("{}", String::from_utf8_lossy(&output.stdout));
-
     if !output.status.success() {
+        debug!("{}", String::from_utf8_lossy(&output.stdout));
         bail!("git decided to screw us after we did --check, nice")
     }
 
