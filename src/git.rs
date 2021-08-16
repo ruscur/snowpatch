@@ -18,7 +18,10 @@ use log::info;
 use log::warn;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::fs;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -274,6 +277,56 @@ fn get_git_push_options() -> Result<PushOptions<'static>> {
     Ok(po)
 }
 
+/// The nuclear option.
+fn git_binary_apply_mbox(workdir: &Path, mbox: &Vec<u8>) -> Result<()> {
+    let mut git_process = Command::new("git")
+        .arg("apply")
+        .arg("--check")
+        .current_dir(workdir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Couldn't invoke git binary");
+
+    let mut stdin = git_process.stdin.take().expect("Couldn't open stdin");
+    stdin.write_all(mbox).expect("Couldn't write to stdin");
+    drop(stdin);
+    let output = git_process
+        .wait_with_output()
+        .expect("Couldn't read stdout");
+
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+
+    if !output.status.success() {
+        bail!("Series doesn't apply with git binary either.")
+    }
+
+    // Now we do it again, with meaning.
+    let mut git_process = Command::new("git")
+        .arg("apply")
+        .arg("--index")
+        .current_dir(workdir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Couldn't invoke git binary");
+
+    let mut stdin = git_process.stdin.take().expect("Couldn't open stdin");
+    stdin.write_all(mbox).expect("Couldn't write to stdin");
+    drop(stdin);
+    let output = git_process
+        .wait_with_output()
+        .expect("Couldn't read stdout");
+
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+
+    if !output.status.success() {
+        bail!("git decided to screw us after we did --check, nice")
+    }
+
+    Ok(())
+}
+
 fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
     let key = serialize(&id)?;
     let worker_id = rayon::current_thread_index().unwrap();
@@ -282,7 +335,7 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
     // We (hopefully) now have exclusive access to the worktree.
     let mut worktree_path = workdir.clone();
     worktree_path.push(format!("snowpatch{}", worker_id));
-    let repo = Repository::open(worktree_path)?;
+    let repo = Repository::open(&worktree_path)?;
 
     clean_and_reset(&repo, "master")?;
 
@@ -300,9 +353,16 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
     );
 
     // By testing first there's no consequences on the tree if it fails
-    test_apply(&repo, &diff)?;
+    match test_apply(&repo, &diff) {
+        Ok(_) => repo.apply(&diff, git2::ApplyLocation::Both, None)?,
+        Err(_) => {
+            // There's a disappointingly large chance that a series that won't
+            // apply with git2 will actually apply just fine with the binary.
+            // So let's do that instead.
+            git_binary_apply_mbox(&worktree_path, &mbox)?;
+        }
+    }
 
-    repo.apply(&diff, git2::ApplyLocation::Both, None)?;
     let sig = repo.signature()?;
 
     let url_prefix: String = String::from_utf8_lossy(
@@ -367,4 +427,19 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::{self, Read};
+
+    #[test]
+    fn test_git_binary() {
+        let mut mbox = File::open("/home/ruscur/patch.mbox").unwrap();
+        let mut buffer: Vec<u8> = vec![];
+        mbox.read_to_end(&mut buffer).unwrap();
+        git_binary_apply_mbox(&PathBuf::from("/home/ruscur/code/linux"), &buffer).unwrap();
+    }
 }
