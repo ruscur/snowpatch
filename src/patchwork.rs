@@ -269,9 +269,18 @@ pub struct Project {
     pub link_name: String,
     pub list_email: String,
     pub list_id: String,
+/*
+ *
+ * The following weren't being used.  Patchwork presents these as empty strings
+ * instead of null, and Url::parse("") understandably fails.
+ * Could use a workaround like https://github.com/serde-rs/serde/issues/1425#issuecomment-462282398
+ * but we don't even use these anyway.  It's something to be aware of though.
+ *
     pub web_url: Option<Url>,
     pub scm_url: Option<Url>,
     pub webscm_url: Option<Url>,
+ *
+ */
 }
 
 // /api/1.2/patches/
