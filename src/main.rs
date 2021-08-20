@@ -152,7 +152,7 @@ fn main() -> Result<()> {
     rayon::spawn(move || loop {
         dispatch.wait_and_send().unwrap();
     });
-    let mut watchcat = Watchcat::new("linuxppc-dev", patchwork);
+    let mut watchcat = Watchcat::new(&config.name, patchwork);
     watchcat.scan()?;
 
     loop {

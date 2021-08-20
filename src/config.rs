@@ -30,7 +30,7 @@ use crate::DB;
 /// Defines the full set of information snowpatch needs in order to do anything useful.
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    name: String,
+    pub name: String,
     pub git: Git,
     pub patchwork: Patchwork,
     pub runners: Vec<Runner>,
