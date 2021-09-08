@@ -34,25 +34,18 @@ impl Dispatch {
 
                 let context: String = format!("{}-{}", handle, job_name);
 
-                if let Some(state) = job_result.outcome {
-                    let check_to_send = TestResult {
-                        state,
-                        target_url: match job_result.url {
-                            Some(url) => Some(url.to_string()),
-                            None => None,
-                        },
-                        description: job_result.description,
-                        context: Some(context),
-                    };
+                let check_to_send = TestResult {
+                    state: job_result.outcome,
+                    target_url: match job_result.url {
+                        Some(url) => Some(url.to_string()),
+                        None => None,
+                    },
+                    description: job_result.description,
+                    context: Some(context),
+                };
 
-                    self.server
-                        .send_check(series.parse::<u64>()?, &check_to_send)?;
-                } else {
-                    error!("Test failed to run: {} {:?}", key, job_result);
-                    // TODO not exactly sure what to do here.
-                    // the test failed to run on the runner side.
-                    // try and rerun it?
-                }
+                self.server
+                    .send_check(series.parse::<u64>()?, &check_to_send)?;
                 keys_to_drop.push(db_key);
             }
 

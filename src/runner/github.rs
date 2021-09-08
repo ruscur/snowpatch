@@ -70,6 +70,18 @@ struct WorkflowRuns {
 }
 
 #[derive(Debug, Deserialize)]
+struct CheckRunOutput {
+    annotations_count: u64,
+    annotations_url: Url,
+    title: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CheckRun {
+    output: CheckRunOutput,
+}
+
+#[derive(Debug, Deserialize)]
 struct Step {
     conclusion: Conclusion,
     name: String,
@@ -83,6 +95,7 @@ struct Job {
     steps: Vec<Step>,
     url: Url,
     html_url: Url,
+    check_run_url: Url,
     conclusion: Conclusion,
 }
 
@@ -165,6 +178,13 @@ impl GitHubActions {
         )?)
     }
 
+    /// Get a CheckRun from its API URL.
+    fn get_check_run(&self, run_url: &Url) -> Result<CheckRun> {
+        Ok(serde_json::from_value(
+            self.api_req("GET", &run_url)?.into_json()?,
+        )?)
+    }
+
     fn get_workflow_runs_for_branch(&self, branch: &str) -> Result<WorkflowRuns> {
         let mut runs_url = self.api.clone();
         runs_url
@@ -185,120 +205,134 @@ impl GitHubActions {
         )?)
     }
 
-    fn build_run_description(&self, wfr: &WorkflowRun) -> Result<String> {
-        let jobs = self.get_jobs(&wfr.jobs_url)?;
-        let conclusion = wfr
-            .conclusion
-            .as_ref()
-            .context("Couldn't get conclusion on completed run")?;
+    fn wfr_to_runner_result(&self, wfr: &WorkflowRun) -> Result<RunnerResult> {
+        let state = match wfr.status {
+            Status::Queued => JobState::Waiting,
+            Status::InProgress => JobState::Running,
+            Status::Completed => match &wfr.conclusion {
+                Some(c) => match c {
+                    Conclusion::ActionRequired => JobState::Failed,
+                    Conclusion::Cancelled => JobState::Failed,
+                    Conclusion::Failure => JobState::Completed,
+                    Conclusion::Neutral => JobState::Completed,
+                    Conclusion::Success => JobState::Completed,
+                    Conclusion::Skipped => JobState::Failed,
+                    Conclusion::Stale => JobState::Failed,
+                    Conclusion::TimedOut => JobState::Failed,
+                    Conclusion::StartupFailure => JobState::Failed,
+                },
+                None => JobState::Failed,
+            },
+        };
 
-        let desc = match conclusion {
-            Conclusion::ActionRequired => {
-                String::from("Job couldn't complete without manual intervention.")
-            }
-            Conclusion::Cancelled => String::from("Job cancelled."),
-            Conclusion::Failure => {
-                let failures: Vec<&Job> = jobs
-                    .jobs
-                    .par_iter()
-                    .filter(|j| j.conclusion == Conclusion::Failure)
-                    .collect();
-                let failure_count = failures.len();
+        let (outcome, description): (TestState, String) = match &wfr.conclusion {
+            Some(c) => match c {
+                Conclusion::ActionRequired => (
+                    TestState::Fail,
+                    String::from("Manual intervention required"),
+                ),
+                Conclusion::Cancelled => (TestState::Fail, String::from("Job manually cancelled")),
+                Conclusion::Failure => {
+                    let jobs = self.get_jobs(&wfr.jobs_url)?;
+                    let failures: Vec<&Job> = jobs
+                        .jobs
+                        .par_iter()
+                        .filter(|j| j.conclusion == Conclusion::Failure)
+                        .collect();
+                    let failure_count = failures.len();
 
-                if failure_count == 0 {
-                    error!("Run reports Failure but jobs have no failures?");
-                    debug!("{:?}", jobs);
-                    bail!("Run reported Failure but couldn't find failures in jobs");
-                } else if failure_count > 1 {
-                    format!("{} of {} jobs failed.", failure_count, jobs.count)
-                } else {
-                    let failed_job = failures.first().context("Rust can't count.")?;
-                    let failed_steps: Vec<&Step> = failed_job
-                        .steps
-                        .iter()
-                        .filter(|s| s.conclusion == Conclusion::Failure)
+                    let description: String = if failure_count == 0 {
+                        error!("Run reports Failure but jobs have no failures?");
+                        debug!("{:?}", jobs);
+                        bail!("Run reported Failure but couldn't find failures in jobs");
+                    } else if failure_count > 1 {
+                        format!("{} of {} jobs failed.", failure_count, jobs.count)
+                    } else {
+                        let failed_job = failures.first().context("Rust can't count.")?;
+                        let failed_steps: Vec<&Step> = failed_job
+                            .steps
+                            .iter()
+                            .filter(|s| s.conclusion == Conclusion::Failure)
+                            .collect();
+
+                        if failed_steps.len() == 1 {
+                            let step = failed_steps.first().unwrap();
+                            format!("{} failed at step {}.", failed_job.name, step.name)
+                        } else {
+                            format!(
+                                "{} failed {} of {} steps.",
+                                failed_job.name,
+                                failed_steps.len(),
+                                failed_job.steps.len()
+                            )
+                        }
+                    };
+                    (TestState::Fail, description)
+                }
+                Conclusion::Neutral => (
+                    TestState::Warning,
+                    String::from("Neutral job result, check for details"),
+                ),
+                Conclusion::Success => {
+                    // Glad it worked, now let's see if there's any warnings.
+                    let jobs = self.get_jobs(&wfr.jobs_url)?;
+                    let check_runs: Vec<CheckRunOutput> = jobs
+                        .jobs
+                        .par_iter()
+                        .map(|j| self.get_check_run(&j.check_run_url))
+                        .filter(|cr| cr.is_ok()) // XXX how to do nicely? and_then()?
+                        .map(|cr| cr.unwrap().output)
+                        .filter(|cr| cr.annotations_count > 0)
                         .collect();
 
-                    if failed_steps.len() == 1 {
-                        let step = failed_steps.first().unwrap();
-                        format!("{} failed at step {}.", failed_job.name, step.name)
+                    if check_runs.len() == 0 {
+                        (
+                            TestState::Success,
+                            format!("Successfully ran {} jobs.", jobs.count),
+                        )
+                    } else if check_runs.len() == 1 {
+                        let check_run = check_runs.first().unwrap(); // safe because len
+                        (
+                            TestState::Warning,
+                            format!(
+                                "{} found {} issues.",
+                                check_run.title, check_run.annotations_count
+                            ),
+                        )
                     } else {
-                        format!(
-                            "{} failed {} of {} steps.",
-                            failed_job.name,
-                            failed_steps.len(),
-                            failed_job.steps.len()
+                        let total_annotations: u64 =
+                            check_runs.par_iter().map(|cr| cr.annotations_count).sum();
+                        (
+                            TestState::Warning,
+                            format!(
+                                "Found {} issues from {} of {} jobs.",
+                                &total_annotations,
+                                check_runs.len(),
+                                jobs.count
+                            ),
                         )
                     }
                 }
-            }
-            Conclusion::Neutral => todo!(),
-            Conclusion::Success => format!("Successfully ran {} jobs.", jobs.count),
-            Conclusion::Skipped => String::from("Job skipped."),
-            Conclusion::Stale => String::from("Job stale.  Dunno what that means."),
-            Conclusion::TimedOut => String::from("Job timed out."),
-            Conclusion::StartupFailure => String::from("GitHub is having a moment."),
+                Conclusion::Skipped => (TestState::Warning, String::from("Job skipped.")),
+                Conclusion::Stale => (
+                    TestState::Warning,
+                    String::from("Job 'stale'?  No results."),
+                ),
+                Conclusion::StartupFailure => {
+                    (TestState::Fail, String::from("Job currently broken."))
+                }
+                Conclusion::TimedOut => (TestState::Fail, String::from("Job timed out.")),
+            },
+            None => (TestState::Fail, String::from("Missing conclusion from job")),
         };
 
-        Ok(desc)
-    }
-
-    fn wfr_to_runner_result(&self, wfr: &WorkflowRun) -> RunnerResult {
-        RunnerResult {
+        Ok(RunnerResult {
             name: wfr.name.clone(),
-            state: match wfr.status {
-                Status::Queued => JobState::Waiting,
-                Status::InProgress => JobState::Running,
-                Status::Completed => {
-                    match &wfr.conclusion {
-                        Some(c) => {
-                            match c {
-                                Conclusion::ActionRequired => JobState::Failed,
-                                Conclusion::Cancelled => JobState::Failed,
-                                Conclusion::Failure => JobState::Completed,
-                                Conclusion::Neutral => JobState::Completed,
-                                Conclusion::Success => JobState::Completed,
-                                Conclusion::Skipped => JobState::Failed, // XXX
-                                Conclusion::Stale => JobState::Failed,
-                                Conclusion::TimedOut => JobState::Failed,
-                                Conclusion::StartupFailure => JobState::Failed,
-                            }
-                        }
-                        None => JobState::Failed,
-                    }
-                }
-            },
-            outcome: match &wfr.conclusion {
-                Some(c) => {
-                    match c {
-                        Conclusion::ActionRequired => Some(TestState::Warning), // XXX
-                        Conclusion::Cancelled => Some(TestState::Fail),
-                        Conclusion::Failure => Some(TestState::Fail),
-                        Conclusion::Neutral => Some(TestState::Warning),
-                        Conclusion::Success => Some(TestState::Success),
-                        Conclusion::Skipped => Some(TestState::Warning),
-                        Conclusion::Stale => Some(TestState::Warning),
-                        Conclusion::TimedOut => Some(TestState::Fail),
-                        Conclusion::StartupFailure => Some(TestState::Fail),
-                    }
-                }
-                None => None,
-            },
+            state,
+            outcome,
             url: Some(wfr.html_url.clone()),
-            description: {
-                if wfr.status != Status::Completed {
-                    None
-                } else {
-                    match self.build_run_description(wfr) {
-                        Ok(desc) => Some(desc),
-                        Err(e) => {
-                            error!("Failed to build description: {}", e.to_string());
-                            None
-                        }
-                    }
-                }
-            },
-        }
+            description: Some(description),
+        })
     }
 }
 
@@ -345,13 +379,10 @@ impl Runner for GitHubActions {
     fn get_progress(&self, branch_name: &String, _url: Option<&Url>) -> Result<Vec<RunnerResult>> {
         let wfr = self.get_workflow_runs_for_branch(&branch_name)?;
 
-        let progress: Vec<RunnerResult> = wfr
-            .runs
+        wfr.runs
             .par_iter()
             .map(|run| self.wfr_to_runner_result(run))
-            .collect();
-
-        Ok(progress)
+            .collect()
     }
 
     fn clean_up(&self, _branch_name: &String, _url: Option<&Url>) -> Result<()> {
@@ -367,7 +398,7 @@ mod tests {
     fn get_gha() -> GitHubActions {
         GitHubActions::new(
             Agent::new(),
-            &Url::parse("https://github.com/linuxppc/linux-ci").unwrap(),
+            &Url::parse("https://github.com/ruscur/linux-ci").unwrap(),
             None,
         )
         .unwrap()
@@ -399,6 +430,7 @@ mod tests {
     fn get_progress() -> Result<()> {
         let runner: Box<dyn Runner> = Box::new(get_gha());
         let jobs: Vec<RunnerResult> = runner.get_progress(&"snowpatch/254076".to_string(), None)?;
+        println!("{:?}", jobs);
 
         let finished_jobs: Vec<&RunnerResult> = jobs
             .par_iter()
@@ -408,20 +440,6 @@ mod tests {
 
         println!("{:?}", jobs);
         println!("{:?}", finished_jobs);
-
-        Ok(())
-    }
-
-    #[test]
-    fn build_description_for_failure() -> Result<()> {
-        let gha = get_gha();
-
-        let failed_run = gha.get_workflow_run(
-            &Url::parse("https://api.github.com/repos/linuxppc/linux-ci/actions/runs/990193337")
-                .unwrap(),
-        )?;
-
-        println!("{}", gha.build_run_description(&failed_run)?);
 
         Ok(())
     }

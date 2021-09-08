@@ -39,7 +39,7 @@ pub enum JobState {
 pub struct RunnerResult {
     pub name: String, // name of the running job
     pub state: JobState,
-    pub outcome: Option<TestState>,
+    pub outcome: TestState,
     pub url: Option<Url>, // user-facing results URL
     pub description: Option<String>,
 }
