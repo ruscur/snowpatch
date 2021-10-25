@@ -208,12 +208,20 @@ fn try_do_work(id: u64, workdir: PathBuf) -> Result<()> {
     }
 }
 
-fn test_apply(repo: &Repository, diff: &Diff) -> Result<()> {
+/// Check if applying the patch through libgit2 will work.
+fn apply_to_repo(repo: &Repository, mbox: &Vec<u8>) -> Result<()> {
+    // Create the Diff from the mbox file.
+    // We do this here because parsing can fail in libgit2 but not with the binary fallback
+    let diff = Diff::from_buffer(mbox)?;
+
     let mut ao = git2::ApplyOptions::new();
     ao.check(true);
-    let result = repo.apply(&diff, git2::ApplyLocation::Both, Some(&mut ao));
+    repo.apply(&diff, git2::ApplyLocation::Both, Some(&mut ao))?;
 
-    Ok(result?)
+    // If we're here, the test application succeeded and we can do it for real
+    repo.apply(&diff, git2::ApplyLocation::Both, None)?;
+
+    Ok(())
 }
 
 /// This should restore
@@ -342,21 +350,16 @@ fn do_work(id: u64, workdir: PathBuf) -> Result<()> {
 
     let mbox = download_file(&mbox_url)?;
 
-    let diff = Diff::from_buffer(&mbox)?;
-
-    let deltacount = diff.deltas().count();
-    debug!(
-        "I'm thread {} with series {} with {} deltas",
-        worker_id, id, deltacount
-    );
-
-    // By testing first there's no consequences on the tree if it fails
-    match test_apply(&repo, &diff) {
-        Ok(_) => repo.apply(&diff, git2::ApplyLocation::Both, None)?,
+    // If the libgit2 patch apply fails, we can fall back to use the binary
+    match apply_to_repo(&repo, &mbox) {
+        Ok(_) => {
+            debug!("Applying series {} through libgit2", id);
+        }
         Err(_) => {
             // There's a disappointingly large chance that a series that won't
             // apply with git2 will actually apply just fine with the binary.
             // So let's do that instead.
+            warn!("Series {} failed to apply through libgit2, trying binary...", id);
             drop(repo);
             git_binary_apply_mbox(&worktree_path, &mbox)?;
             repo = Repository::open(&worktree_path)?;
