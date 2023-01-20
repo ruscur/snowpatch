@@ -30,7 +30,7 @@ build = "build.rs"
 
 [dependencies]
 reqwest = "0.9"
-git2 = "0.9"
+git2 = "0.16"
 url = "1.7"
 serde = "1.0"
 serde_derive = "1.0"
