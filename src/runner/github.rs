@@ -255,9 +255,9 @@ impl GitHubActions {
                             .filter(|s| s.conclusion == Conclusion::Failure)
                             .collect();
 
-                        for step in failed_steps {
+                        for step in &failed_steps {
                             if step.name == "Set up job" {
-                                return (
+                                (
                                     TestState::Warning,
                                     format!(
                                         "{} failed to run, not the patch's fault",
