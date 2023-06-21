@@ -1,8 +1,6 @@
 snowpatch - CI for patches
 ==========================
 
-[![Build Status](https://travis-ci.org/ruscur/snowpatch.svg?branch=master)](https://travis-ci.org/ruscur/snowpatch) [![Crates.io](https://img.shields.io/crates/v/snowpatch.svg)](https://crates.io/crates/snowpatch)
-
 Overview
 -------
 
@@ -17,19 +15,18 @@ builds and test suites, and reports the results.
 
 At present, snowpatch supports
 [Patchwork](http://jk.ozlabs.org/projects/patchwork/) and
-[Jenkins](http://jenkins-ci.org).
+GitHub Actions.
 
 snowpatch is designed in line with Patchwork's philosophy of supplementing,
 rather than replacing, existing workflows. For projects which already use
 Patchwork as their core patch management tool, snowpatch does not impose any
 additional changes to the development workflow.
 
-snowpatch requires nothing more than a Patchwork account and Jenkins account
+snowpatch requires nothing more than a Patchwork account and GitHub account
 with appropriate permissions and an API key. Many projects using patch-based
 workflows are highly decentralised, using Patchwork instances they do not
 administer, and build machines hidden behind corporate firewalls. As such,
-snowpatch is designed not to require administrator access or additional plugins
-for either Patchwork or Jenkins.
+snowpatch is designed not to require administrator access.
 
 snowpatch is deliberately minimalistic, which distinguishes it from tools like
 [Zuul](https://zuul-ci.org) which are more sophisticated and may be more
@@ -69,15 +66,7 @@ We do not provide pre-built binaries at this stage.
 * [`git`](https://git-scm.com): we try to use the
   [`git2-rs`](https://github.com/alexcrichton/git2-rs) library where
   possible, but we still need the binary for a few operations.
-* [CMake](https://cmake.org)
-* [OpenSSL](https://www.openssl.org) headers
 * [OpenSSH](https://www.openssh.com) headers
-
-### Installing with cargo
-
-To install the latest tagged release of snowpatch using cargo, run `cargo
-install snowpatch`, which will download and compile snowpatch and all its Rust
-dependencies. The snowpatch binary will be installed as `snowpatch`.
 
 ### Building manually
 
@@ -102,28 +91,18 @@ Contributing
 Please read our [contribution guidelines](CONTRIBUTING.md) for more
 information about contributing.
 
-
 Contact
 ------
 
-snowpatch development is done on our mailing list,
-[snowpatch@lists.ozlabs.org](mailto:snowpatch@lists.ozlabs.org). To
-subscribe, go to the
-[listinfo page](https://lists.ozlabs.org/listinfo/snowpatch).
-
-Patches are tracked on
-[patchwork.ozlabs.org](https://patchwork.ozlabs.org/project/snowpatch/).
-
-Our IRC channel is #snowpatch on [Freenode](https://freenode.net).
+Just do stuff through GitHub issues & pull requests.
 
 snowpatch is maintained by
-[Russell Currey](mailto:ruscur@russell.cc) and
-[Andrew Donnellan](mailto:andrew.donnellan@au1.ibm.com).
+[Russell Currey](mailto:ruscur@russell.cc).
 
 
 Licence
 -------
-Copyright © 2016-2018 IBM Corporation.
+Copyright © 2016-2023 IBM Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
