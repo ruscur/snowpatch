@@ -18,7 +18,7 @@
 #![deny(warnings)]
 
 extern crate clap;
-use clap::{App, Arg};
+use clap::{arg, command, value_parser};
 
 extern crate ron;
 
@@ -36,6 +36,7 @@ use std::{
     fmt::Display,
     thread,
     time::{Duration, Instant},
+    path::PathBuf,
 };
 use ureq::{Agent, AgentBuilder};
 
@@ -87,24 +88,21 @@ lazy_static! {
 fn main() -> Result<()> {
     let db_id = DB.generate_id()?;
 
-    let matches = App::new("snowpatch")
-        .version("1.0")
-        .author("Russell Currey <ruscur@russell.cc>")
-        .about("Connects to Patchwork to automate CI workflows")
+    let matches = command!()
         .arg(
-            Arg::with_name("config")
-                .value_name("FILE")
-                .help("snowpatch requires a config file, see the docs for details")
-                .takes_value(true)
-                .required(true),
+            arg!(
+                -c --config <FILE> "snowpatch requires a config file"
+            )
+            .required(true)
+            .value_parser(value_parser!(PathBuf)),
         )
         .get_matches();
 
     env_logger::init();
 
     // unwrap is safe because config is a required value
-    let config = matches.value_of("config").unwrap();
-    let config = config::parse_config(config)?;
+    let config = matches.get_one::<PathBuf>("config").unwrap();
+    let config = config::parse_config(&config)?;
 
     // XXX let's try and use config as little as possible
     // instead of keeping around the patchwork config,

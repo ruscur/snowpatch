@@ -153,9 +153,9 @@ fn populate_database(config: &Config) -> Result<()> {
     Ok(())
 }
 
-pub fn parse_config(filename: &str) -> Result<Config> {
+pub fn parse_config(filename: &PathBuf) -> Result<Config> {
     let file = File::open(filename)
-        .with_context(|| format!("Failed to open config file at {}", filename))?;
+        .with_context(|| format!("Failed to open config file at {}", filename.display()))?;
 
     let config: Config =
         from_reader(file).with_context(|| format!("Failed to parse config file"))?;
