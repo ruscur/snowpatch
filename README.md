@@ -13,9 +13,9 @@ integration automation server. snowpatch monitors the patch queue for incoming
 patches, applies patches on top of an existing tree, triggers appropriate
 builds and test suites, and reports the results.
 
-At present, snowpatch supports
-[Patchwork](http://jk.ozlabs.org/projects/patchwork/) and
-GitHub Actions.
+At present, snowpatch only supports
+[Patchwork](http://jk.ozlabs.org/projects/patchwork/) as its source of patches 
+and state, and GitHub Actions as its test runner.
 
 snowpatch is designed in line with Patchwork's philosophy of supplementing,
 rather than replacing, existing workflows. For projects which already use
@@ -44,14 +44,14 @@ creation of snowpatch.
 Project Status
 --------------
 
-snowpatch is currently under heavy development. It implements enough core
-functionality to be useful for basic CI requirements, and is currently deployed
-in production for a small number of projects. There are many core features that
-are still yet to be implemented, and documentation is still incomplete.
+snowpatch is in the "Odd Fixes" state.  The Linux kernel describes this as:
 
-At this stage, there are no stability guarantees, and behaviour is liable to
-change significantly in new versions without notice.
+>"It has a maintainer but they don't have time to do much other than throw
+>the odd patch in."
 
+snowpatch is still happily running the developer CI for a few projects so it will
+continue to get fixes, but substantial new features are unlikely unless someone
+(which could be you!) has a surge of time and motivation.
 
 Installing
 ----------
@@ -88,8 +88,7 @@ Additional documentation can be found in the [`docs`](docs) directory.
 Contributing
 ------------
 
-Please read our [contribution guidelines](CONTRIBUTING.md) for more
-information about contributing.
+Open a pull request.
 
 Contact
 ------
@@ -97,7 +96,7 @@ Contact
 Just do stuff through GitHub issues & pull requests.
 
 snowpatch is maintained by
-[Russell Currey](mailto:ruscur@russell.cc).
+[Andrew Donnellan](mailto:ajd@linux.ibm.com).
 
 
 Licence
