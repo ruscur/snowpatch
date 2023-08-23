@@ -201,6 +201,6 @@ mod tests {
 
     #[test]
     fn parse_good_config() {
-        assert!(parse_config("examples/tests/valid.ron").is_ok());
+        assert!(parse_config(&PathBuf::from("examples/tests/valid.ron")).is_ok());
     }
 }
